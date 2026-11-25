@@ -649,13 +649,15 @@ def render_cut(
     overlay = make_overlay(title, subtitle, idx, total, work / f"overlay_{idx:02d}.png")
 
     out = work / f"cut_{idx:02d}.mp4"
-    fade_out_start = max(dur - 0.28, 0.1)
+    fade_in = 0.32 if idx == 0 else 0.14
+    fade_out = 0.42 if idx == total - 1 else 0.16
+    fade_out_start = max(dur - fade_out - 0.02, 0.1)
     post = (
-        f"[v0]fade=t=in:st=0:d=0.24,fade=t=out:st={fade_out_start:.3f}:d=0.28,"
+        f"[v0]fade=t=in:st=0:d={fade_in},fade=t=out:st={fade_out_start:.3f}:d={fade_out},"
         f"format=yuv420p[v]"
     )
     afilter = (
-        f"afade=t=in:st=0:d=0.06,afade=t=out:st={max(dur - 0.34, 0.1):.3f}:d=0.34,"
+        f"afade=t=in:st=0:d=0.05,afade=t=out:st={max(dur - 0.3, 0.1):.3f}:d=0.3,"
         f"apad=pad_dur=0.45,loudnorm=I=-14:TP=-1.5:LRA=11"
     )
 

@@ -604,6 +604,7 @@ const STAGES = ['대본 만들기','스크립트 생성 중','영상 렌더링 �
 
 function goStep(n, stage){
   S.step = n; S.stage = stage ?? Math.min(n,3);
+  if(n===3 && previewIdx>0){ previewIdx = 0; }
   ['#card-topic','#card-script','#card-render','#card-result'].forEach((sel,i)=>{
     $(sel).classList.toggle('hidden', i+1 !== n);
   });
@@ -618,7 +619,8 @@ function goStep(n, stage){
     a.classList.toggle('done', k < n);
   });
   if(n===3) syncRenderSummary();
-  if(window.innerWidth < 1024) window.scrollTo({top:0, behavior:'smooth'});
+  renderPreview();
+  window.scrollTo({top:0, behavior:'smooth'});
   save();
 }
 
@@ -1208,7 +1210,8 @@ function init(){
   $$('#toneChips .chip').forEach(b=>b.setAttribute('aria-pressed', String(b.dataset.tone===S.tone)));
   $$('#voiceChips .chip').forEach(b=>b.setAttribute('aria-pressed', String(b.dataset.voice===S.voice)));
   renderCuts(); renderPreview(); refreshKeyState(); refreshLinks();
-  goStep(S.cuts.length && S.step>=2 ? Math.min(S.step,3) : 1, 1);
+  const startStep = (S.cuts.length && S.step>=2) ? Math.min(S.step,3) : 1;
+  goStep(startStep, startStep>=3 ? 2 : 1);
 
   // 프리뷰 컷 이동
   $('#pPrev').onclick = ()=>{ if(!S.cuts.length) return; previewIdx = (previewIdx-1+S.cuts.length)%S.cuts.length; renderPreview(); };
