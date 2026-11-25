@@ -229,8 +229,8 @@
   .steps .st .ic{width:16px; text-align:center; font-size:12px}
 
   /* result */
-  .video-shell{background:#0b0d14; border-radius:18px; padding:10px; box-shadow:var(--shadow-lg)}
-  video{width:100%; border-radius:12px; display:block; background:#000; max-height:62vh}
+  .video-shell{background:#0b0d14; border-radius:18px; padding:10px; box-shadow:var(--shadow-lg); display:flex; justify-content:center}
+  video{width:100%; max-width:400px; border-radius:12px; display:block; background:#000; max-height:64vh}
   .dl-row{display:flex; gap:10px; flex-wrap:wrap; margin-top:14px}
   .cap-grid{display:grid; gap:12px; margin-top:6px}
   .cap{border:1px solid var(--line); border-radius:14px; overflow:hidden}
@@ -1064,7 +1064,7 @@ function baseTags(){
   const t = (S.topic + ' ' + S.title).replace(/[^가-힣A-Za-z0-9 ]/g,' ').split(/\s+/).filter(w=>w.length>1);
   const uniq = [...new Set(t)].slice(0,4);
   const common = ['쇼츠','릴스','숏폼','부업','정보'];
-  return [...uniq.map(w=>'#'+w), ...common.map(w=>'#'+w)];
+  return [...new Set([...uniq.map(w=>'#'+w), ...common.map(w=>'#'+w)])];
 }
 
 function templateCaptions(){
