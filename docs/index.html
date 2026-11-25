@@ -376,8 +376,8 @@
       </div>
 
       <div class="note" id="genLog" style="margin-top:14px; display:none"></div>
-      <div class="note warn" id="noKeyNote" style="margin-top:14px">
-        <div>Gemini API 키가 없으면 <b>직접 쓰기</b>로 대본을 만들 수 있어요. 키는 ⚙ 설정에서 한 번만 넣으면 이 브라우저에만 저장됩니다.</div>
+      <div class="note" id="noKeyNote" style="margin-top:14px">
+        <div>키 없이도 <b>무료 AI</b>가 대본을 자동으로 씁니다. Gemini 키를 넣으면 문장이 더 좋아지고, 무료 AI가 붐빌 때도 바로 생성됩니다(⚙ 설정, 선택).</div>
       </div>
     </section>
 
@@ -385,6 +385,7 @@
     <section class="card hidden" id="card-script">
       <h2>2. 대본 다듬기</h2>
       <p class="sub">나레이션은 목소리로, 자막은 화면에 크게, 비주얼 프롬프트는 배경 이미지 검색어로 쓰입니다.</p>
+      <div class="note" id="scriptLog" style="display:none"></div>
 
       <label class="f" for="hookTitle">영상 훅 제목 <span style="color:var(--muted);font-weight:700">(상단 노란 배너)</span></label>
       <input type="text" id="hookTitle" maxlength="40" placeholder="예) 월급 300만원 부업 썰" />
@@ -499,7 +500,7 @@
       <div class="grp">
         <h4>🔑 Gemini API 키 <span class="badge opt">선택</span></h4>
         <input type="password" id="sGemini" placeholder="AIza..." autocomplete="off" />
-        <div class="hint">없어도 됩니다. 있으면 대본·캡션을 AI가 자동 작성합니다. (무료 키: aistudio.google.com/apikey)</div>
+        <div class="hint">없어도 됩니다. 없으면 무료 AI(text.pollinations.ai)로 자동 작성하고, 있으면 Gemini를 먼저 시도합니다. (무료 키: aistudio.google.com/apikey)</div>
       </div>
       <div class="grp">
         <h4>🐙 GitHub 토큰 <span class="badge">필수</span></h4>
@@ -755,9 +756,11 @@ $$('.chip.ex').forEach(b=>b.onclick=()=>{
 });
 
 /* ══════════════════════════════════════════════════════════
-   Gemini
+   AI 호출: Gemini(키 있으면) → 무료 AI(text.pollinations.ai) → 기본 틀
    ══════════════════════════════════════════════════════════ */
 const GEMINI_MODELS = ['gemini-2.5-flash','gemini-2.0-flash','gemini-1.5-flash'];
+const POLL_URL = 'https://text.pollinations.ai/';   // 키 없이 쓰는 무료 AI (브라우저 CORS 허용 확인됨)
+const POLL_SYS = '한국 유튜브 쇼츠·릴스 대본 작가다. 요청한 JSON 객체 하나만 출력한다. 설명·인사·마크다운·코드블록 금지. 한국어 문장은 입으로 말하는 자연스러운 구어체로 쓴다.';
 
 function extractJson(text){
   let t = String(text||'').trim();
@@ -804,6 +807,78 @@ async function gemini(prompt, {json=true, logEl=null}={}){
   throw lastErr || new Error('Gemini 호출 실패');
 }
 
+/* ── 무료 AI (키 불필요) ───────────────────────────────────
+   POST https://text.pollinations.ai/  · {messages, jsonMode}
+   무료 한도: IP당 45초에 1회, 응답 800토큰. 넘으면 402 + Retry-After,
+   잘리면 422(OUTPUT_TOO_LONG) — 기다렸다 다시 부르거나 컷 수를 줄여 재시도. */
+const safeJson = t => { try{ return JSON.parse(t); }catch(e){ return null; } };
+
+async function countdown(sec, say, label){
+  for(let s=Math.ceil(sec); s>0; s--){ if(say) say(`${label} ${s}초`); await sleep(1000); }
+}
+
+async function pollinations(messages, {json=true, say=null, maxWaits=1, timeoutMs=75000}={}){
+  let waits = 0, netTry = 0, lastErr;
+  for(;;){
+    let r, txt = '';
+    try{
+      if(say) say(netTry || waits ? '무료 AI 다시 요청 중…' : '무료 AI가 쓰는 중… (10~30초)');
+      const ctrl = new AbortController();
+      const timer = setTimeout(()=>ctrl.abort(), timeoutMs);
+      try{
+        r = await fetch(POLL_URL, {
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({messages, jsonMode: json, temperature: 0.85}),
+          signal: ctrl.signal
+        });
+        txt = await r.text();
+      }finally{ clearTimeout(timer); }
+    }catch(e){
+      lastErr = e;
+      if(++netTry >= 2) throw new Error(`무료 AI 연결 실패 (${e.name==='AbortError'?'시간 초과':'네트워크'})`);
+      await sleep(1500); continue;
+    }
+    const j = safeJson(txt);
+    const code = String(j?.error?.code || '');
+    if(r.status===402 || r.status===429 || code==='FREE_LIMIT'){
+      if(waits >= maxWaits) throw new Error('무료 AI 무료 한도 대기 초과 (FREE_LIMIT)');
+      waits++;
+      const ra = Number(r.headers.get('Retry-After') || 0) || 20;
+      await countdown(Math.min(50, Math.max(5, ra)), say, '무료 AI 순서 기다리는 중');
+      continue;
+    }
+    if(code==='OUTPUT_TOO_LONG') throw new Error('OUTPUT_TOO_LONG');
+    if(!r.ok){
+      const m = j?.error?.message ? ` · ${String(j.error.message).slice(0,70)}` : '';
+      throw new Error(`무료 AI ${r.status}${code?' '+code:''}${m}`);
+    }
+    if(/free limit reached/i.test(txt)){
+      if(waits >= maxWaits) throw new Error('무료 AI 무료 한도 대기 초과 (FREE_LIMIT)');
+      waits++; await countdown(25, say, '무료 AI 순서 기다리는 중'); continue;
+    }
+    if(!txt.trim()) throw new Error('무료 AI 빈 응답');
+    return json ? extractJson(txt) : txt.trim();
+  }
+}
+
+/* Gemini 키가 있으면 Gemini 먼저, 없거나 실패하면 무료 AI로 자동 전환 */
+async function aiJson({geminiPrompt, freePrompt, say=null, geminiLog=null}){
+  const key = S.settings.gemini.trim();
+  if(key){
+    try{
+      const data = await gemini(geminiPrompt, {json:true, logEl: geminiLog});
+      return {data, source:'gemini'};
+    }catch(e){
+      if(say) say('Gemini 응답이 없어 무료 AI로 넘어갑니다…');
+    }
+  }
+  const data = await pollinations([
+    {role:'system', content: POLL_SYS},
+    {role:'user', content: freePrompt}
+  ], {json:true, say});
+  return {data, source:'free'};
+}
+
 function scriptPrompt(){
   return `너는 한국 유튜브 쇼츠·릴스 전문 대본 작가다. 아래 주제로 9:16 세로 쇼츠 대본을 쓴다.
 
@@ -823,40 +898,166 @@ JSON만 출력:
 {"title":"...","cuts":[{"narration":"...","subtitle":"...","visual_query":"..."}]}`;
 }
 
+/* 무료 AI용 같은 형식의 짧은 프롬프트 (800토큰 한도 안에 들어가게) */
+function scriptPromptFree(n=5){
+  return `주제: ${S.topic || S.title}
+톤: ${S.tone}
+
+${n}컷 쇼츠 대본을 아래 JSON 형식으로만 출력해. 설명·인사말·마크다운 금지.
+{"title":"훅 제목 12~22자","cuts":[{"narration":"구어체 1~2문장 40자 안팎","subtitle":"10~20자 핵심","visual_query":"6~9 english words only"}]}
+
+규칙
+- 1컷은 3초 안에 시선을 잡는 훅, 마지막 컷은 여운 있는 마무리나 바로 써먹을 팁.
+- subtitle은 마침표·따옴표 없이.
+- visual_query는 반드시 영어 단어만(한글 금지), 인물/장소/사물 + 분위기·조명.
+- "여러분", "지금부터", "알아보겠습니다" 같은 상투어 금지.`;
+}
+
+/* ── 배경 이미지 검색어(영어) 보정 + 기본 틀 대본 ───────── */
+const EN_KEYWORDS = [
+  ['러닝','morning run'],['달리기','running'],['운동','workout'],['헬스','gym'],['다이어트','fitness lifestyle'],
+  ['공부','studying at desk'],['독서','reading books'],['책','stack of books'],['돈','money and wallet'],
+  ['부업','side hustle laptop'],['주식','stock chart screen'],['투자','investment chart'],['커피','coffee cup close up'],
+  ['요리','cooking in kitchen'],['아이','child playing'],['육아','parenting at home'],['출근','morning commute city'],
+  ['회사','office desk'],['여행','travel landscape'],['바다','ocean waves'],['밤','city night lights'],
+  ['새벽','early dawn street'],['폰','hands holding phone'],['아이폰','iphone close up'],['노트북','laptop workspace'],
+  ['학원','classroom'],['수학','math notebook'],['영상','camera filming'],['쇼츠','vertical phone video'],
+  ['집','cozy home interior'],['차','car interior dashboard'],['운전','driving seat'],['건강','healthy lifestyle'],
+  ['잠','bedroom soft morning']
+];
+const VISUAL_SCENES = [
+  'cinematic korean city street, soft morning light',
+  'person working at desk at night, warm lamp light',
+  'close up hands holding phone, shallow depth of field',
+  'cozy home interior, natural window light',
+  'sunrise over city rooftops, calm mood',
+  'busy sidewalk, bokeh background'
+];
+function localVisual(i=0){
+  const src = `${S.topic} ${S.title}`.toLowerCase();
+  const hit = EN_KEYWORDS.find(([ko])=>src.includes(ko));
+  const scene = VISUAL_SCENES[i % VISUAL_SCENES.length];
+  return hit ? `${hit[1]}, ${scene.split(',').pop().trim()}` : scene;
+}
+function ensureEnglishVisual(q, i=0){
+  const raw = String(q||'').replace(/\s+/g,' ').trim();
+  if(!raw) return localVisual(i);
+  if(/[가-힣]/.test(raw)) return localVisual(i);           // 한글 섞이면 검색이 안 되니 영어로 대체
+  const en = raw.replace(/[^A-Za-z0-9\s,.-]/g,' ').replace(/\s+/g,' ').trim().toLowerCase();
+  return en.split(' ').filter(Boolean).length >= 3 ? en.slice(0,120) : localVisual(i);
+}
+function cleanSubtitle(v){
+  return String(v||'').replace(/[.。!?！？"'“”‘’…]+$/g,'').replace(/\s+/g,' ').trim().slice(0,26);
+}
+function cleanNarration(v){
+  return String(v||'').replace(/\s+/g,' ').trim().slice(0,140);
+}
+function normalizeScript(data){
+  const cuts = (data?.cuts || []).filter(c=>c && (c.narration || c.subtitle)).slice(0,8);
+  return {
+    title: String(data?.title||'').trim().slice(0,40) || (S.topic||'').trim().slice(0,22) || '나의 쇼츠',
+    cuts: cuts.map((c,i)=>({
+      narration: cleanNarration(c.narration),
+      subtitle: cleanSubtitle(c.subtitle),
+      visual_query: ensureEnglishVisual(c.visual_query, i)
+    }))
+  };
+}
+
+/* 네트워크가 전부 막혔을 때: 바탕만 잡아 주는 기본 대본 */
+function templateScript(){
+  const t = (S.topic||'').trim() || '내 이야기';
+  const key = t.replace(/[?!.,]/g,'').split(/\s+/).slice(0,3).join(' ') || t;
+  const mid = S.tone==='정보 꿀팁'
+    ? {n:'돈도 시간도 많이 안 들어. 오늘 10분이면 충분해.', s:'10분이면 충분'}
+    : S.tone==='제품 리뷰'
+      ? {n:'가격 생각하면 지금이 제일 괜찮았어.', s:'가격 대바 괜찮아'}
+      : {n:'솔직히 처음엔 나만 손해 보는 줄 알았어.', s:'나만 손해인 줄'};
+  return {
+    title: (key + ' 이야기').slice(0,40),
+    cuts: [
+      {narration:`${key}, 한 번쯤 궁금했을 거야.`, subtitle:`${key} 궁금했다면`, visual_query:localVisual(0)},
+      {narration:'나도 반신반의로 시작했는데, 하고 나서 생각이 바뀌었어.', subtitle:'해보고 바뀐 생각', visual_query:localVisual(1)},
+      {narration:'제일 크게 달라진 건 속도가 아니라 매일 한다는 거였어.', subtitle:'바뀐 건 습관', visual_query:localVisual(2)},
+      {narration:mid.n, subtitle:mid.s, visual_query:localVisual(3)},
+      {narration:`${key}, 궁금하면 오늘 한 번만 해 봐. 그게 시작이야.`, subtitle:'오늘 한 번부터', visual_query:localVisual(4)}
+    ]
+  };
+}
+
+/* 대본 만들기: Gemini → 무료 AI(5컷 → 4컷) → 기본 틀 */
+async function makeScript(say){
+  const key = S.settings.gemini.trim();
+  if(key){
+    try{
+      const data = await gemini(scriptPrompt(), {json:true, logEl:null});
+      const script = normalizeScript(data);
+      if(script.cuts.length >= 3) return {script, source:'gemini'};
+      throw new Error('Gemini 대본이 짧습니다');
+    }catch(e){
+      if(say) say('Gemini 응답이 없어 무료 AI로 넘어갑니다…');
+    }
+  }
+  for(const n of [5,4]){
+    try{
+      const data = await pollinations([
+        {role:'system', content: POLL_SYS},
+        {role:'user', content: scriptPromptFree(n)}
+      ], {json:true, say});
+      const script = normalizeScript(data);
+      if(script.cuts.length >= 3) return {script, source:'free'};
+      throw new Error('SHORT_SCRIPT');
+    }catch(e){
+      const msg = String(e.message||'');
+      if(msg==='OUTPUT_TOO_LONG' || msg==='SHORT_SCRIPT') continue;   // 컷 수를 줄여 재시도
+      if(say) say(`무료 AI가 지금은 막혔어요 (${msg.slice(0,40)}) — 기본 틀로 만들게요`);
+      break;
+    }
+  }
+  return {script: templateScript(), source:'template'};
+}
+
 $('#btnGenerate').onclick = async ()=>{
   const topic = $('#topic').value.trim();
   if(!topic){ toast('주제를 먼저 적어주세요'); $('#topic').focus(); return; }
   S.topic = topic;
-  const log = $('#genLog'); log.style.display='block'; log.textContent='대본 생성 중…';
+  const log = $('#genLog'); log.className='note'; log.style.display='block'; log.textContent='대본 생성 중…';
+  const slog = $('#scriptLog'); slog.className='note'; slog.style.display='block'; slog.textContent='대본 생성 중…';
+  const say = t => { log.textContent = t; slog.textContent = t; };
   $('#btnGenerate').disabled = true;
   goStep(2, 2);
   try{
-    const data = await gemini(scriptPrompt(), {json:true, logEl:log});
-    const cuts = (data.cuts||[]).filter(c=>c && (c.narration||c.subtitle)).slice(0,8);
-    if(!cuts.length) throw new Error('대본이 비어 있습니다');
-    S.title = (data.title||'').slice(0,40) || topic.slice(0,22);
-    S.cuts = cuts.map(c=>({
-      narration:String(c.narration||'').trim(),
-      subtitle:String(c.subtitle||'').trim(),
-      visual_query:String(c.visual_query||'').trim()
-    }));
+    const {script, source} = await makeScript(say);
+    if(!script.cuts.length) throw new Error('대본이 비어 있습니다');
+    S.title = script.title;
+    S.cuts = script.cuts;
     $('#hookTitle').value = S.title;
     renderCuts(); renderPreview(); save();
-    log.className='note ok'; log.textContent='대본 완성! 아래에서 문장을 다듬고 렌더링하세요.';
+    log.className='note ok';
+    log.innerHTML = source==='gemini'
+      ? '대본 완성! 아래에서 문장을 다듬고 렌더링하세요.'
+      : source==='free'
+        ? '무료 AI로 대본 완성! 문장은 편하게 고쳐 써도 돼요. (⚙에서 Gemini 키를 넣으면 문장이 더 좋아져요)'
+        : '지금은 AI가 붐비는 편이라 기본 틀로 만들었어요. 나레이션만 채워 넣으면 됩니다.';
+    slog.className = source==='template' ? 'note warn' : 'note ok';
+    slog.innerHTML = log.innerHTML;
     goStep(2, 1);
-    setTimeout(()=>{ log.style.display='none'; }, 4000);
+    setTimeout(()=>{ log.style.display='none'; }, 6000);
+    setTimeout(()=>{ slog.style.display='none'; }, 7000);
   }catch(e){
     log.className='note warn';
+    slog.className='note warn';
     if(e.message==='NO_KEY'){
-      log.innerHTML='Gemini 키가 없어 AI 생성을 건너뜁니다. <b>직접 쓰기</b>로 진행하세요. (⚙ 설정에서 키를 넣으면 자동 생성)';
+      log.innerHTML='AI 키가 없어 생성을 건너뜁니다. <b>직접 쓰기</b>로 진행하세요.';
       if(!S.cuts.length) startManual();
     }else{
       log.innerHTML = `AI 생성 실패: ${esc(e.message.slice(0,120))}<br>잠시 뒤 다시 시도하거나 <b>직접 쓰기</b>로 진행하세요.`;
     }
+    slog.innerHTML = log.innerHTML;
     goStep(S.cuts.length?2:1, 1);
+    if(S.cuts.length) setTimeout(()=>{ slog.style.display='none'; }, 8000);
   }finally{
     $('#btnGenerate').disabled = false;
-    setTimeout(()=>{ if(log.textContent.includes('대본 완성')) log.style.display='none'; }, 4200);
   }
 };
 
@@ -1089,10 +1290,10 @@ function templateCaptions(){
 
 async function buildCaptions(){
   const grid = $('#captionGrid');
-  grid.innerHTML = '<div class="hint">캡션 만드는 중…</div>';
+  const say = t => { grid.innerHTML = `<div class="hint">${esc(t)}</div>`; };
+  say('캡션 만드는 중…');
   let caps = null;
-  if(S.settings.gemini.trim()){
-    const prompt = `한국어 숏폼 영상 업로드용 캡션을 써라.
+  const geminiPrompt = `한국어 숏폼 영상 업로드용 캡션을 써라.
 제목: ${S.title}
 주제: ${S.topic}
 톤: ${S.tone}
@@ -1104,15 +1305,25 @@ async function buildCaptions(){
 - tiktok: 아주 짧게(1~2줄) + 해시태그 4~6개
 - AI 말투·이모지 남발 금지, 광고 문구 금지
 JSON만: {"instagram":"...","youtube":"...","tiktok":"..."}`;
-    try{ caps = await gemini(prompt, {json:true}); }catch(e){ caps = null; }
-  }
-  if(!caps || !caps.instagram) caps = templateCaptions();
+  const freePrompt = `한국어 숏폼 업로드 캡션 3종을 JSON으로만 출력해. 설명·마크다운 금지.
+제목: ${S.title}
+주제: ${S.topic}
+자막: ${S.cuts.map(c=>c.subtitle).filter(Boolean).join(' / ')}
+
+형식: {"instagram":"2~3줄 + 해시태그 6~8개","youtube":"제목 + 한 줄 + #Shorts + 해시태그 4~6개","tiktok":"1~2줄 + 해시태그 4~6개"}
+이모지·광고문구·"여러분" 같은 상투어 금지.`;
+  try{
+    const {data} = await aiJson({geminiPrompt, freePrompt, say});
+    caps = data;
+  }catch(e){ caps = null; }
+  if(!caps || typeof caps!=='object' || !caps.instagram) caps = templateCaptions();
+  const pick = k => (typeof caps[k]==='string' && caps[k].trim()) ? caps[k].trim() : templateCaptions()[k];
 
   const items = [['instagram','Instagram / 릴스'],['youtube','YouTube Shorts'],['tiktok','TikTok']];
   grid.innerHTML = items.map(([k,label])=>`
     <div class="cap">
       <div class="cap-h"><b>${label}</b><button class="btn ghost sm" data-copy="${k}">복사</button></div>
-      <div class="cap-b" id="cap-${k}">${esc(caps[k]||'')}</div>
+      <div class="cap-b" id="cap-${k}">${esc(pick(k))}</div>
     </div>`).join('');
   grid.onclick = e=>{
     const b = e.target.closest('[data-copy]');
@@ -1164,7 +1375,7 @@ $('#btnTest').onclick = async ()=>{
     if(S.settings.gemini){
       const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(S.settings.gemini)}`);
       out.push(r.ok ? '✓ Gemini 키 정상' : `✗ Gemini 키 오류 (${r.status})`);
-    } else out.push('• Gemini 키 없음 (선택)');
+    } else out.push('• Gemini 키 없음 → 무료 AI 자동 사용 (설정 불필요)');
   }catch(e){
     out.push(`✗ ${e.message}`);
   }finally{
@@ -1181,7 +1392,14 @@ function refreshLinks(){
   $('#linkPat').href = `https://github.com/settings/personal-access-tokens/new?name=shorts-maker&target_name=${owner}&expires_in=90`;
 }
 function refreshKeyState(){
-  $('#noKeyNote').style.display = S.settings.gemini ? 'none' : 'block';
+  const n = $('#noKeyNote');
+  if(S.settings.gemini){
+    n.className = 'note';
+    n.innerHTML = '<div>Gemini 키가 연결됐어요. 대본·캡션을 Gemini로 먼저 만들고, 실패하거나 막히면 <b>무료 AI</b>로 자동 전환합니다.</div>';
+  }else{
+    n.className = 'note';
+    n.innerHTML = '<div>키 없이도 <b>무료 AI</b>가 대본을 자동으로 씁니다. Gemini 키를 넣으면 문장이 더 좋아지고, 무료 AI가 붐빌 때도 바로 생성됩니다(⚙ 설정, 선택).</div>';
+  }
 }
 
 $('#btnCopyYaml').onclick = async ()=>{
