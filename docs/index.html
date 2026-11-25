@@ -133,8 +133,8 @@
   .btn:hover{filter:brightness(.985)}
 
   .note{
-    display:flex; gap:10px; padding:12px 13px; border-radius:12px; background:#f7f9ff;
-    border:1px solid #e3e9ff; color:#3a4a86; font-size:12.5px; line-height:1.6;
+    display:block; padding:12px 13px; border-radius:12px; background:#f7f9ff;
+    border:1px solid #e3e9ff; color:#3a4a86; font-size:12.5px; line-height:1.65;
   }
   .note.warn{background:#fffaeb; border-color:#fdecc8; color:#8a5a06}
   .note.ok{background:#f0fdf6; border-color:#d3f3e2; color:#0b6b43}
@@ -277,10 +277,19 @@
     .phone-wrap{padding:12px}
     .phone .hook{font-size:12.5px} .phone .sub{font-size:15px}
     .cut-body .two{grid-template-columns:1fr}
-    .topbar{height:54px; padding:0 13px}
-    .brand{font-size:14.5px}
+    .topbar{height:54px; padding:0 10px; gap:6px; overflow:hidden}
+    .brand{font-size:13.5px; white-space:nowrap; overflow:hidden; min-width:0}
+    .brand small{display:none}
+    .brand .mark{width:26px; height:26px; border-radius:8px; font-size:12px}
+    .icon-btn{height:32px; padding:0 9px; font-size:12px; white-space:nowrap; flex:none}
+    .pill.free{font-size:11px; padding:0 8px; height:26px; flex:none}
+    .full{display:none} .short{display:inline}
+    .stepper{padding:10px 11px; font-size:11.5px; gap:4px; border-radius:12px; scrollbar-width:none}
+    .stepper::-webkit-scrollbar{display:none}
+    .stepper .arw{font-size:11px}
     .btn{height:50px}
   }
+  .short{display:none}
   @media (min-width:1024px){
     .phone.max{max-width:330px; margin:0 auto}
   }
@@ -295,9 +304,9 @@
   </div>
   <div class="spacer"></div>
   <span class="pill free" title="서버·크레딧 비용 없이 GitHub Actions 무료 한도로 렌더링합니다">₩0 무료</span>
-  <a class="icon-btn" id="btnDemo" style="text-decoration:none">▶ 예시 영상</a>
-  <button class="icon-btn" id="btnHelp">설정 가이드</button>
-  <button class="icon-btn" id="btnSettings" aria-label="설정">⚙ 설정</button>
+  <a class="icon-btn" id="btnDemo" style="text-decoration:none"><span class="full">▶ 예시 영상</span><span class="short">▶ 예시</span></a>
+  <button class="icon-btn" id="btnHelp"><span class="full">설정 가이드</span><span class="short">가이드</span></button>
+  <button class="icon-btn" id="btnSettings" aria-label="설정"><span class="full">⚙ 설정</span><span class="short">⚙</span></button>
 </header>
 
 <div class="shell">
@@ -818,7 +827,7 @@ $('#btnGenerate').onclick = async ()=>{
   const topic = $('#topic').value.trim();
   if(!topic){ toast('주제를 먼저 적어주세요'); $('#topic').focus(); return; }
   S.topic = topic;
-  const log = $('#genLog'); log.style.display='flex'; log.textContent='대본 생성 중…';
+  const log = $('#genLog'); log.style.display='block'; log.textContent='대본 생성 중…';
   $('#btnGenerate').disabled = true;
   goStep(2, 2);
   try{
@@ -1043,7 +1052,7 @@ async function onRenderDone(run){
   $('#player').src = url;
   $('#btnDownload').href = url;
   $('#btnRelease').href = releaseUrl;
-  $('#playerNote').style.display='flex';
+  $('#playerNote').style.display='block';
   $('#playerNote').className='note';
   $('#playerNote').innerHTML = '영상이 안 보이면 <b>MP4 다운로드</b>를 눌러 사진 앱에 저장하세요. (아이폰 사파리: 길게 눌러 저장)';
 
@@ -1172,7 +1181,7 @@ function refreshLinks(){
   $('#linkPat').href = `https://github.com/settings/personal-access-tokens/new?name=shorts-maker&target_name=${owner}&expires_in=90`;
 }
 function refreshKeyState(){
-  $('#noKeyNote').style.display = S.settings.gemini ? 'none' : 'flex';
+  $('#noKeyNote').style.display = S.settings.gemini ? 'none' : 'block';
 }
 
 $('#btnCopyYaml').onclick = async ()=>{
