@@ -295,6 +295,7 @@
   </div>
   <div class="spacer"></div>
   <span class="pill free" title="서버·크레딧 비용 없이 GitHub Actions 무료 한도로 렌더링합니다">₩0 무료</span>
+  <a class="icon-btn" id="btnDemo" style="text-decoration:none">▶ 예시 영상</a>
   <button class="icon-btn" id="btnHelp">설정 가이드</button>
   <button class="icon-btn" id="btnSettings" aria-label="설정">⚙ 설정</button>
 </header>
@@ -544,6 +545,22 @@
         <button class="btn ghost sm" id="btnCheckAll" style="margin-top:8px">상태 확인</button>
         <div id="checkResult" class="hint" style="margin-top:10px"></div>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- 예시 영상 모달 -->
+<div class="modal" id="demo">
+  <div class="sheet" style="max-width:420px">
+    <div class="sheet-h">
+      <h3>이렇게 나와요 · 18초 예시</h3>
+      <button class="icon-btn" data-close="demo">닫기</button>
+    </div>
+    <div class="sheet-b" style="gap:10px">
+      <div class="video-shell" style="padding:8px">
+        <video src="demo/sample.mp4" poster="demo/sample-thumb.jpg" controls playsinline preload="metadata"></video>
+      </div>
+      <div class="hint">AI 이미지 + Ken Burns 무빙 + 나레이션 + 자막으로 자동 생성된 결과입니다.</div>
     </div>
   </div>
 </div>
@@ -1111,6 +1128,7 @@ function openSettings(){
   openModal('settings');
 }
 $('#btnSettings').onclick = openSettings;
+$('#btnDemo').onclick = ()=>{ openModal('demo'); const v=$('#demo video'); if(v){ v.currentTime=0; v.play().catch(()=>{}); } };
 $('#btnHelp').onclick = ()=>{ refreshLinks(); openModal('help'); };
 
 $('#btnSave').onclick = ()=>{
