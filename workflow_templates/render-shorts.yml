@@ -1,0 +1,91 @@
+# ─────────────────────────────────────────────────────────────
+# 0원 쇼츠 자동 제작기 — GitHub Actions 렌더 워크플로
+#
+# 이 파일은 GitHub 웹에서 `.github/workflows/render-shorts.yml` 로
+# 한 번만 복사해 넣으면 됩니다. (Pickle 앱 권한으로는 workflows 폴더에
+# 푸시할 수 없어 템플릿으로 보관합니다.)
+# ─────────────────────────────────────────────────────────────
+name: render-shorts
+
+run-name: "쇼츠 렌더 #${{ github.run_number }}"
+
+on:
+  workflow_dispatch:
+    inputs:
+      payload_json:
+        description: "렌더 설정 JSON (웹 스튜디오가 자동으로 채웁니다)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: render-shorts
+  cancel-in-progress: false
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: 1) 코드 가져오기
+        uses: actions/checkout@v4
+
+      - name: 2) 파이썬 준비
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: 3) ffmpeg · 한국어 폰트 설치
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg fonts-noto-cjk fonts-nanum
+
+      - name: 4) 파이썬 패키지 설치
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: 5) 입력값 저장
+        env:
+          PAYLOAD_JSON: ${{ inputs.payload_json }}
+        run: |
+          python - <<'PY'
+          import os, pathlib
+          raw = os.environ.get("PAYLOAD_JSON", "")
+          pathlib.Path("payload.json").write_text(raw, encoding="utf-8")
+          print("payload 길이:", len(raw))
+          PY
+
+      - name: 6) 쇼츠 렌더링
+        env:
+          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
+        run: |
+          python scripts/render_shorts.py --input payload.json --output output/shorts_final.mp4
+
+      - name: 7) 결과물 보관 (아티팩트)
+        uses: actions/upload-artifact@v4
+        with:
+          name: shorts-${{ github.run_number }}
+          path: |
+            output/shorts_final.mp4
+            output/thumbnail.jpg
+            output/manifest.json
+          retention-days: 7
+
+      - name: 8) 다운로드 링크 만들기 (Release)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="render-${GITHUB_RUN_NUMBER}"
+          TITLE="쇼츠 렌더 #${GITHUB_RUN_NUMBER}"
+          NOTES="0원 쇼츠 자동 제작기로 만든 영상입니다. 아래 Assets에서 shorts_final.mp4 를 내려받으세요."
+          gh release create "$TAG" \
+            output/shorts_final.mp4 \
+            output/thumbnail.jpg \
+            --title "$TITLE" --notes "$NOTES" --repo "$GITHUB_REPOSITORY" \
+            || gh release upload "$TAG" output/shorts_final.mp4 output/thumbnail.jpg --clobber --repo "$GITHUB_REPOSITORY"
+          echo "### 완성 🎬" >> "$GITHUB_STEP_SUMMARY"
+          echo "https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/shorts_final.mp4" >> "$GITHUB_STEP_SUMMARY"

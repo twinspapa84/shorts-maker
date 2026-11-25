@@ -1,0 +1,11 @@
+{
+  "title": "월급 300만원 부업 썰",
+  "voice": "ko-KR-InJoonNeural",
+  "rate": "+12%",
+  "tone": "유머 썰",
+  "cuts": [
+    {"narration": "월급 300만원 받던 제가, 퇴근하고 두 시간만 써서 부업을 시작했어요.", "subtitle": "월급 300, 퇴근 후 두 시간", "visual_query": "korean office worker leaving office at night, city lights, cinematic"},
+    {"narration": "처음엔 딱 만 원 벌었습니다. 커피 한 잔 값이었죠.", "subtitle": "첫 수익은 딱 만 원", "visual_query": "single coffee cup on desk at night, warm lamp light, moody"},
+    {"narration": "근데 석 달 뒤, 부업 수입이 월급의 절반을 넘었습니다.", "subtitle": "석 달 뒤, 월급의 절반", "visual_query": "laptop screen with rising chart at night, hands typing, cinematic"}
+  ]
+}
