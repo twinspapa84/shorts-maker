@@ -828,7 +828,7 @@ async function pollinations(messages, {json=true, say=null, maxWaits=1, timeoutM
       try{
         r = await fetch(POLL_URL, {
           method:'POST', headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({messages, jsonMode: json, temperature: 0.85}),
+          body: JSON.stringify({messages, jsonMode: json, temperature: 0.6}),
           signal: ctrl.signal
         });
         txt = await r.text();
@@ -908,7 +908,7 @@ ${n}컷 쇼츠 대본을 아래 JSON 형식으로만 출력해. 설명·인사�
 
 규칙
 - 1컷은 3초 안에 시선을 잡는 훅, 마지막 컷은 여운 있는 마무리나 바로 써먹을 팁.
-- 주제에 없는 브랜드·상품·금액은 지어내지 말 것. 확인된 것만 말할 것.
+- 주제에 없는 브랜드·상품·금액은 지어내지 말 것. 확인된 것만 말할 것. 숫자·기간·인원도 지어내지 말 것.
 - 쉬운 말로. 한자어·과한 비유 대신 실제로 말하듯.
 - narration과 subtitle은 같은 이야기로 이어지게.
 - subtitle은 마침표·따옴표 없이.
