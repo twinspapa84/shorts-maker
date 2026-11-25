@@ -170,6 +170,9 @@
     box-shadow:var(--shadow-lg); border:1px solid #1b2130;
   }
   .phone-top{display:flex; align-items:center; justify-content:space-between; color:#7d869c; font-size:11px; font-weight:800; letter-spacing:.06em; padding:0 4px 8px}
+  .phone-top .nav{display:inline-flex; align-items:center; gap:2px; letter-spacing:.04em}
+  .phone-top .nav button{border:0; background:transparent; color:#8d96ad; font-size:15px; line-height:1; padding:2px 5px; cursor:pointer; border-radius:6px}
+  .phone-top .nav button:hover{background:#171c29; color:#fff}
   .phone{
     position:relative; width:100%; aspect-ratio:9/16; border-radius:18px; overflow:hidden;
     background:#0a0c13; isolation:isolate;
@@ -330,6 +333,14 @@
       <label class="f" for="topic">쇼츠 주제</label>
       <textarea id="topic" rows="3" placeholder="예) 월급 300만원 직장인이 퇴근 후 두 시간으로 부업 시작한 썰"></textarea>
       <div class="hint">구체적으로 쓸수록 대본이 좋아집니다. 숫자·경험·결과가 들어가면 훅이 강해져요.</div>
+      <div class="chips" style="margin-top:10px">
+        <button class="chip ex" data-ex="퇴근 후 두 시간으로 시작한 부업, 3개월 만에 월급 절반까지">
+          <span class="em">예시</span>부업 3개월 썰</button>
+        <button class="chip ex" data-ex="중학생 아들이 수학 시험에서 30점 오른 실제 공부법">
+          <span class="em">예시</span>수학 성적 올린 법</button>
+        <button class="chip ex" data-ex="만 원짜리 무료 앱으로 매달 20만원 아끼는 생활 꿀팁">
+          <span class="em">예시</span>생활비 절약 꿀팁</button>
+      </div>
 
       <div style="margin-top:18px" class="row">
         <div>
@@ -393,6 +404,15 @@
 
       <div class="steps" id="stepList" style="margin-top:14px"></div>
 
+      <div class="mobile-only" id="mobileProgress" style="margin-top:14px; display:none">
+        <div style="display:flex; justify-content:space-between; font-size:12.5px; font-weight:800">
+          <span id="mpLabel">렌더 준비</span><span id="mpPct">0%</span>
+        </div>
+        <div style="height:8px; background:#eceff7; border-radius:99px; overflow:hidden; margin-top:6px">
+          <div id="mpBar" style="height:100%; width:0; background:linear-gradient(90deg,#4a68ff,#3b53ec); transition:width .4s"></div>
+        </div>
+      </div>
+
       <div class="row" style="margin-top:16px">
         <button class="btn primary" id="btnRender" style="flex:2 1 240px">🎬 렌더링 시작</button>
         <button class="btn ghost" id="btnBack2" style="flex:1 1 140px">← 대본 수정</button>
@@ -426,7 +446,7 @@
   <!-- 우측 프리뷰 -->
   <aside class="stage">
     <div class="phone-wrap">
-      <div class="phone-top"><span>9:16 PREVIEW</span><span id="previewCut">CUT 1 / 1</span></div>
+      <div class="phone-top"><span>9:16 PREVIEW</span><span class="nav"><button id="pPrev" aria-label="이전 컷">‹</button><span id="previewCut">CUT 1 / 1</span><button id="pNext" aria-label="다음 컷">›</button></span></div>
       <div class="phone" id="phone">
         <div class="bg"></div>
         <div class="scrim"></div>
@@ -701,6 +721,10 @@ $$('#voiceChips .chip').forEach(b=>b.onclick=()=>{
   $$('#voiceChips .chip').forEach(x=>x.setAttribute('aria-pressed','false'));
   b.setAttribute('aria-pressed','true'); S.voice = b.dataset.voice; save();
 });
+$$('.chip.ex').forEach(b=>b.onclick=()=>{
+  $('#topic').value = b.dataset.ex; S.topic = b.dataset.ex; save();
+  $('#topic').focus();
+});
 
 /* ══════════════════════════════════════════════════════════
    Gemini
@@ -874,8 +898,11 @@ function setRenderStages(list){
 }
 
 function setPct(p, label){
-  $('#renderPct').textContent = `${Math.max(0,Math.min(100,Math.round(p)))}%`;
+  const v = Math.max(0,Math.min(100,Math.round(p)));
+  $('#renderPct').textContent = `${v}%`;
   if(label) $('#renderLbl').textContent = label;
+  const mp = $('#mobileProgress');
+  if(mp){ mp.style.display = (v>0 && v<101) ? 'block' : 'none'; $('#mpPct').textContent = `${v}%`; $('#mpBar').style.width = `${v}%`; if(label) $('#mpLabel').textContent = label; }
 }
 
 $('#btnRender').onclick = startRender;
@@ -1183,12 +1210,9 @@ function init(){
   renderCuts(); renderPreview(); refreshKeyState(); refreshLinks();
   goStep(S.cuts.length && S.step>=2 ? Math.min(S.step,3) : 1, 1);
 
-  // 프리뷰 자동 순환 (편집 중일 때만)
-  setInterval(()=>{
-    if(S.step>=3 || !S.cuts.length || document.hidden) return;
-    previewIdx = (previewIdx+1) % S.cuts.length;
-    renderPreview();
-  }, 4200);
+  // 프리뷰 컷 이동
+  $('#pPrev').onclick = ()=>{ if(!S.cuts.length) return; previewIdx = (previewIdx-1+S.cuts.length)%S.cuts.length; renderPreview(); };
+  $('#pNext').onclick = ()=>{ if(!S.cuts.length) return; previewIdx = (previewIdx+1)%S.cuts.length; renderPreview(); };
 
   // 진행 중인 렌더가 있으면 이어서 폴링
   if(S.run && S.run.status !== 'completed' && S.run.id && S.step===3){
