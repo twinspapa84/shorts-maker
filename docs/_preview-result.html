@@ -1,0 +1,1265 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#0b0d14" />
+<title>0원 쇼츠 스튜디오 · AI 숏폼 자동 제작</title>
+<style>
+  :root{
+    --bg:#f4f5f9; --panel:#ffffff; --line:#e6e8f0; --line-2:#eef0f6;
+    --ink:#0e1220; --ink-2:#3d4457; --muted:#7c8397;
+    --brand:#3b5bfd; --brand-2:#2f49d6; --brand-soft:#eef1ff;
+    --amber:#ffcd00; --ok:#12b76a; --warn:#f79009; --danger:#f04438;
+    --radius:16px; --radius-sm:12px;
+    --shadow:0 1px 2px rgba(16,24,40,.04), 0 8px 24px -12px rgba(16,24,40,.14);
+    --shadow-lg:0 24px 60px -24px rgba(16,24,40,.35);
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
+  html,body{margin:0; padding:0}
+  body{
+    background:var(--bg); color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Pretendard","Malgun Gothic",system-ui,sans-serif;
+    font-size:15px; line-height:1.5; -webkit-font-smoothing:antialiased;
+  }
+  button{font-family:inherit}
+  a{color:inherit}
+  .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+
+  /* ── top bar ─────────────────────────────── */
+  .topbar{
+    position:sticky; top:0; z-index:40; height:60px;
+    display:flex; align-items:center; gap:12px; padding:0 18px;
+    background:rgba(255,255,255,.86); backdrop-filter:saturate(180%) blur(14px);
+    border-bottom:1px solid var(--line);
+  }
+  .brand{display:flex; align-items:center; gap:10px; font-weight:800; letter-spacing:-.02em; font-size:16px}
+  .brand .mark{
+    width:30px; height:30px; border-radius:9px; display:grid; place-items:center;
+    background:linear-gradient(150deg,#4b6bff,#2f35c9); color:#fff; font-size:13px;
+    box-shadow:0 6px 14px -6px rgba(59,91,253,.8);
+  }
+  .brand small{display:block; font-weight:600; font-size:11px; color:var(--muted); letter-spacing:0}
+  .topbar .spacer{flex:1}
+  .pill{
+    display:inline-flex; align-items:center; gap:6px; height:30px; padding:0 11px;
+    border-radius:999px; background:#f0f2f8; color:var(--ink-2); font-size:12px; font-weight:700;
+  }
+  .pill.free{background:#eafaf1; color:#0b7a4b}
+  .icon-btn{
+    height:34px; padding:0 13px; border-radius:10px; border:1px solid var(--line);
+    background:#fff; color:var(--ink-2); font-size:13px; font-weight:700; cursor:pointer;
+    display:inline-flex; align-items:center; gap:6px;
+  }
+  .icon-btn:hover{border-color:#cfd4e3; background:#fbfcff}
+
+  /* ── layout ──────────────────────────────── */
+  .shell{
+    max-width:1440px; margin:0 auto; padding:22px 20px 120px;
+    display:grid; grid-template-columns:222px minmax(0,1fr) 392px; gap:22px; align-items:start;
+  }
+  .rail{position:sticky; top:82px; display:flex; flex-direction:column; gap:6px}
+  .rail .rail-title{font-size:11px; font-weight:800; color:var(--muted); letter-spacing:.08em; padding:4px 10px 8px}
+  .rail a{
+    display:flex; align-items:center; gap:10px; padding:11px 12px; border-radius:12px;
+    text-decoration:none; color:var(--ink-2); font-weight:650; font-size:14px;
+    border:1px solid transparent;
+  }
+  .rail a .n{
+    width:22px; height:22px; border-radius:7px; display:grid; place-items:center;
+    background:#eceff7; color:#8a90a3; font-size:12px; font-weight:800; flex:none;
+  }
+  .rail a.active{background:#fff; border-color:var(--line); box-shadow:var(--shadow); color:var(--ink)}
+  .rail a.active .n{background:var(--brand); color:#fff}
+  .rail a.done .n{background:#eafaf1; color:#0b7a4b}
+  .rail .rail-foot{
+    margin-top:14px; padding:13px; border-radius:12px; background:#0d1220; color:#c9d1e6;
+    font-size:12px; line-height:1.55;
+  }
+  .rail .rail-foot b{color:#fff; display:block; margin-bottom:3px; font-size:12.5px}
+
+  .main{min-width:0; display:flex; flex-direction:column; gap:16px}
+  .card{
+    background:var(--panel); border:1px solid var(--line); border-radius:var(--radius);
+    box-shadow:var(--shadow); padding:20px;
+  }
+  .card h2{margin:0 0 4px; font-size:17px; letter-spacing:-.02em}
+  .card .sub{margin:0 0 16px; color:var(--muted); font-size:13px}
+  .hidden{display:none !important}
+
+  /* stepper */
+  .stepper{
+    display:flex; align-items:center; gap:6px; padding:12px 16px; background:#fff;
+    border:1px solid var(--line); border-radius:14px; box-shadow:var(--shadow);
+    font-size:12.5px; font-weight:700; color:var(--muted); overflow:auto;
+  }
+  .stepper .st{display:flex; align-items:center; gap:7px; white-space:nowrap}
+  .stepper .dot{width:9px; height:9px; border-radius:50%; background:#dfe3ee}
+  .stepper .st.on{color:var(--brand)} .stepper .st.on .dot{background:var(--brand); box-shadow:0 0 0 3px var(--brand-soft)}
+  .stepper .st.ok{color:#0b7a4b} .stepper .st.ok .dot{background:var(--ok)}
+  .stepper .arw{color:#cdd2e0; flex:none}
+
+  /* inputs */
+  label.f{display:block; font-size:12.5px; font-weight:800; color:var(--ink-2); margin:0 0 6px}
+  .hint{font-size:12px; color:var(--muted); margin-top:6px}
+  input[type=text], input[type=password], input[type=url], textarea, select{
+    width:100%; font-size:16px; font-family:inherit; color:var(--ink);
+    background:#fbfcfe; border:1px solid var(--line); border-radius:12px; padding:12px 13px;
+    outline:none; transition:border-color .15s, box-shadow .15s, background .15s;
+  }
+  textarea{resize:vertical; line-height:1.55}
+  input:focus, textarea:focus, select:focus{border-color:#b9c4f8; background:#fff; box-shadow:0 0 0 4px rgba(59,91,253,.10)}
+  .row{display:flex; gap:10px; flex-wrap:wrap}
+  .row > *{flex:1 1 200px}
+  .chips{display:flex; gap:8px; flex-wrap:wrap}
+  .chip{
+    padding:9px 14px; border-radius:999px; border:1px solid var(--line); background:#fff;
+    font-size:13.5px; font-weight:700; color:var(--ink-2); cursor:pointer;
+  }
+  .chip[aria-pressed=true]{border-color:var(--brand); background:var(--brand-soft); color:var(--brand-2)}
+  .chip .em{margin-right:5px}
+
+  .btn{
+    display:inline-flex; align-items:center; justify-content:center; gap:8px;
+    height:48px; padding:0 20px; border-radius:12px; border:1px solid transparent;
+    font-size:15px; font-weight:800; cursor:pointer; letter-spacing:-.01em;
+  }
+  .btn.primary{background:linear-gradient(180deg,#4a68ff,#3b53ec); color:#fff; box-shadow:0 10px 22px -12px rgba(59,91,253,.9)}
+  .btn.primary:disabled{background:#c8cfe6; box-shadow:none; cursor:not-allowed}
+  .btn.ghost{background:#fff; border-color:var(--line); color:var(--ink-2)}
+  .btn.dark{background:#101626; color:#fff}
+  .btn.block{width:100%}
+  .btn.sm{height:38px; padding:0 13px; font-size:13px; border-radius:10px}
+  .btn:hover{filter:brightness(.985)}
+
+  .note{
+    display:flex; gap:10px; padding:12px 13px; border-radius:12px; background:#f7f9ff;
+    border:1px solid #e3e9ff; color:#3a4a86; font-size:12.5px; line-height:1.6;
+  }
+  .note.warn{background:#fffaeb; border-color:#fdecc8; color:#8a5a06}
+  .note.ok{background:#f0fdf6; border-color:#d3f3e2; color:#0b6b43}
+  .note b{font-weight:800}
+
+  /* cut cards */
+  .cuts{display:flex; flex-direction:column; gap:12px}
+  .cut{
+    border:1px solid var(--line); border-radius:14px; background:#fff; overflow:hidden;
+  }
+  .cut-head{
+    display:flex; align-items:center; gap:9px; padding:10px 13px; background:#fafbfe;
+    border-bottom:1px solid var(--line-2);
+  }
+  .cut-head .idx{
+    width:24px; height:24px; border-radius:8px; background:#101626; color:#fff;
+    display:grid; place-items:center; font-size:12px; font-weight:800; flex:none;
+  }
+  .cut-head .dur{font-size:12px; color:var(--muted); font-weight:700; margin-left:auto}
+  .cut-body{padding:13px; display:grid; gap:10px}
+  .cut-body .two{display:grid; grid-template-columns:1fr 1fr; gap:10px}
+  .mini{font-size:11.5px; font-weight:800; color:var(--muted); letter-spacing:.02em; margin-bottom:4px; display:block}
+  .del{
+    border:0; background:transparent; color:#98a0b3; font-size:12px; font-weight:700;
+    cursor:pointer; padding:4px 6px; border-radius:8px;
+  }
+  .del:hover{background:#fff1f0; color:var(--danger)}
+
+  /* stage / phone */
+  .stage{position:sticky; top:82px}
+  .phone-wrap{
+    background:#0b0d14; border-radius:26px; padding:14px 14px 18px;
+    box-shadow:var(--shadow-lg); border:1px solid #1b2130;
+  }
+  .phone-top{display:flex; align-items:center; justify-content:space-between; color:#7d869c; font-size:11px; font-weight:800; letter-spacing:.06em; padding:0 4px 8px}
+  .phone-top .nav{display:inline-flex; align-items:center; gap:2px; letter-spacing:.04em}
+  .phone-top .nav button{border:0; background:transparent; color:#8d96ad; font-size:15px; line-height:1; padding:2px 5px; cursor:pointer; border-radius:6px}
+  .phone-top .nav button:hover{background:#171c29; color:#fff}
+  .phone{
+    position:relative; width:100%; aspect-ratio:9/16; border-radius:18px; overflow:hidden;
+    background:#0a0c13; isolation:isolate;
+  }
+  .phone .bg{
+    position:absolute; inset:-6%; background:
+      radial-gradient(120% 80% at 70% 8%, rgba(90,120,255,.55), transparent 60%),
+      radial-gradient(90% 70% at 15% 78%, rgba(255,150,80,.35), transparent 62%),
+      linear-gradient(160deg,#10131d,#1b2440 55%,#0a0c14);
+    animation:kb 9s ease-out both alternate infinite;
+  }
+  @keyframes kb{from{transform:scale(1)}to{transform:scale(1.1) translate(-1.5%,-1%)}}
+  .phone .scrim{position:absolute; inset:0; background:linear-gradient(180deg,rgba(4,6,12,.82),transparent 42%,transparent 58%,rgba(3,5,10,.92))}
+  .phone .prog{position:absolute; top:10px; left:10px; right:10px; display:flex; gap:4px}
+  .phone .prog i{flex:1; height:3px; border-radius:3px; background:rgba(255,255,255,.28)}
+  .phone .prog i.done{background:var(--amber)} .phone .prog i.cur{background:var(--amber); opacity:.75}
+  .phone .hook{
+    position:absolute; top:34px; left:50%; transform:translateX(-50%);
+    max-width:88%; text-align:center; font-weight:900; font-size:15px; line-height:1.34;
+    letter-spacing:-.02em; color:#141414; background:var(--amber); padding:5px 10px; border-radius:8px;
+    box-shadow:0 6px 18px -10px rgba(0,0,0,.9); word-break:keep-all;
+  }
+  .phone .sub{
+    position:absolute; left:6%; right:6%; bottom:13%; text-align:center;
+    font-weight:900; font-size:19px; line-height:1.28; color:#fff; letter-spacing:-.02em;
+    text-shadow:0 2px 0 #000, 0 -1px 0 #000, 2px 0 0 #000, -2px 0 0 #000, 0 6px 16px rgba(0,0,0,.7);
+    word-break:keep-all;
+  }
+  .phone .empty-hint{position:absolute; inset:0; display:grid; place-items:center; color:#5d667e; font-size:12px; font-weight:700; text-align:center; padding:20px}
+  .phone .rendering{position:absolute; inset:0; display:grid; place-items:center; background:rgba(6,8,14,.72); backdrop-filter:blur(2px)}
+  .ring{width:74px; height:74px; border-radius:50%; border:3px solid rgba(255,255,255,.16); border-top-color:var(--amber); animation:spin 1s linear infinite; margin:0 auto 12px}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .phone .rendering .pct{color:#fff; font-size:22px; font-weight:900; text-align:center}
+  .phone .rendering .lbl{color:#9aa4bd; font-size:11.5px; font-weight:700; margin-top:4px; text-align:center}
+  .phone-foot{display:flex; align-items:center; justify-content:space-between; margin-top:12px; padding:0 4px; color:#8d96ad; font-size:11.5px; font-weight:700}
+  .phone-foot .live{display:inline-flex; align-items:center; gap:5px}
+  .phone-foot .live i{width:6px; height:6px; border-radius:50%; background:var(--ok); box-shadow:0 0 0 3px rgba(18,183,106,.18)}
+
+  .meta-box{margin-top:14px; background:#fff; border:1px solid var(--line); border-radius:14px; padding:14px; box-shadow:var(--shadow)}
+  .meta-box h4{margin:0 0 8px; font-size:12.5px; color:var(--ink-2)}
+  .kv{display:flex; justify-content:space-between; font-size:12.5px; padding:6px 0; border-bottom:1px dashed var(--line-2)}
+  .kv:last-child{border-bottom:0}
+  .kv span{color:var(--muted); font-weight:700}
+  .kv b{font-weight:800}
+
+  /* steps panel */
+  .steps{display:flex; flex-direction:column; gap:6px; margin-top:6px}
+  .steps .st{
+    display:flex; align-items:center; gap:9px; font-size:13px; color:var(--muted); font-weight:650;
+    padding:7px 9px; border-radius:9px;
+  }
+  .steps .st.run{background:var(--brand-soft); color:var(--brand-2)}
+  .steps .st.ok{color:#0b7a4b}
+  .steps .st .ic{width:16px; text-align:center; font-size:12px}
+
+  /* result */
+  .video-shell{background:#0b0d14; border-radius:18px; padding:10px; box-shadow:var(--shadow-lg)}
+  video{width:100%; border-radius:12px; display:block; background:#000; max-height:62vh}
+  .dl-row{display:flex; gap:10px; flex-wrap:wrap; margin-top:14px}
+  .cap-grid{display:grid; gap:12px; margin-top:6px}
+  .cap{border:1px solid var(--line); border-radius:14px; overflow:hidden}
+  .cap-h{display:flex; align-items:center; justify-content:space-between; padding:10px 13px; background:#fafbfe; border-bottom:1px solid var(--line-2)}
+  .cap-h b{font-size:13px}
+  .cap-b{padding:13px; font-size:13.5px; white-space:pre-wrap; line-height:1.65; color:var(--ink-2); max-height:220px; overflow:auto}
+
+  /* modal */
+  .modal{position:fixed; inset:0; z-index:60; display:none; align-items:center; justify-content:center; padding:16px; background:rgba(9,12,20,.5); backdrop-filter:blur(4px)}
+  .modal.open{display:flex}
+  .sheet{
+    width:100%; max-width:560px; max-height:88vh; overflow:auto; background:#fff;
+    border-radius:20px; box-shadow:var(--shadow-lg); border:1px solid var(--line);
+  }
+  .sheet-h{display:flex; align-items:center; justify-content:space-between; padding:18px 20px; border-bottom:1px solid var(--line-2); position:sticky; top:0; background:#fff; z-index:2}
+  .sheet-h h3{margin:0; font-size:16px}
+  .sheet-b{padding:18px 20px 22px; display:grid; gap:16px}
+  .sheet-b .grp{border:1px solid var(--line); border-radius:14px; padding:14px}
+  .grp h4{margin:0 0 10px; font-size:13px; display:flex; align-items:center; gap:7px}
+  .badge{font-size:10.5px; font-weight:800; padding:2px 7px; border-radius:999px; background:#eef1ff; color:var(--brand-2)}
+  .badge.opt{background:#f2f4f8; color:#6b7280}
+  .badge.on{background:#eafaf1; color:#0b7a4b}
+
+  /* toast */
+  #toast{position:fixed; left:50%; bottom:26px; transform:translateX(-50%) translateY(20px); opacity:0;
+    background:#101626; color:#fff; font-size:13px; font-weight:700; padding:11px 18px; border-radius:999px;
+    z-index:80; transition:.24s; pointer-events:none; box-shadow:var(--shadow-lg); max-width:88vw; text-align:center}
+  #toast.show{opacity:1; transform:translateX(-50%) translateY(0)}
+
+  .mobile-only{display:none}
+
+  /* ── responsive ───────────────────────────── */
+  @media (max-width:1180px){
+    .shell{grid-template-columns:200px minmax(0,1fr) 340px}
+  }
+  @media (max-width:1023px){
+    .shell{grid-template-columns:1fr; padding:14px 13px 110px; gap:14px}
+    .rail{display:none}
+    .stage{position:static; order:2}
+    .main{order:1}
+    .mobile-only{display:block}
+    .card{padding:16px; border-radius:14px}
+    .phone{max-width:260px; margin:0 auto}
+    .phone-wrap{padding:12px}
+    .phone .hook{font-size:12.5px} .phone .sub{font-size:15px}
+    .cut-body .two{grid-template-columns:1fr}
+    .topbar{height:54px; padding:0 13px}
+    .brand{font-size:14.5px}
+    .btn{height:50px}
+  }
+  @media (min-width:1024px){
+    .phone.max{max-width:330px; margin:0 auto}
+  }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <div class="mark">▶</div>
+    <div>0원 쇼츠 스튜디오<small>AI 숏폼 자동 제작 · 서버비 0원</small></div>
+  </div>
+  <div class="spacer"></div>
+  <span class="pill free" title="서버·크레딧 비용 없이 GitHub Actions 무료 한도로 렌더링합니다">₩0 무료</span>
+  <a class="icon-btn" id="btnDemo" style="text-decoration:none">▶ 예시 영상</a>
+  <button class="icon-btn" id="btnHelp">설정 가이드</button>
+  <button class="icon-btn" id="btnSettings" aria-label="설정">⚙ 설정</button>
+</header>
+
+<div class="shell">
+  <!-- 좌측 레일 -->
+  <aside class="rail">
+    <div class="rail-title">WORKFLOW</div>
+    <a href="#card-topic" data-rail="1" class="active"><span class="n">1</span>주제 정하기</a>
+    <a href="#card-script" data-rail="2"><span class="n">2</span>대본 다듬기</a>
+    <a href="#card-render" data-rail="3"><span class="n">3</span>영상 렌더링</a>
+    <a href="#card-result" data-rail="4"><span class="n">4</span>완성 · 업로드</a>
+    <div class="rail-foot">
+      <b>어떻게 0원이죠?</b>
+      영상 렌더는 GitHub Actions 무료 러너에서, 화면은 GitHub Pages에서 돌아갑니다. 결제·서버 없음.
+    </div>
+  </aside>
+
+  <!-- 본문 -->
+  <main class="main">
+    <div class="stepper" id="stepper">
+      <div class="st on" data-st="1"><i class="dot"></i>대본 만들기</div>
+      <span class="arw">›</span>
+      <div class="st" data-st="2"><i class="dot"></i>스크립트 생성 중</div>
+      <span class="arw">›</span>
+      <div class="st" data-st="3"><i class="dot"></i>영상 렌더링 중</div>
+      <span class="arw">›</span>
+      <div class="st" data-st="4"><i class="dot"></i>완성</div>
+    </div>
+
+    <!-- STEP 1 -->
+    <section class="card" id="card-topic">
+      <h2>1. 주제만 한 줄 적어주세요</h2>
+      <p class="sub">AI가 5~6컷 쇼츠 대본을 만들어 드립니다. 마음에 안 들면 직접 고쳐도 됩니다.</p>
+
+      <label class="f" for="topic">쇼츠 주제</label>
+      <textarea id="topic" rows="3" placeholder="예) 월급 300만원 직장인이 퇴근 후 두 시간으로 부업 시작한 썰"></textarea>
+      <div class="hint">구체적으로 쓸수록 대본이 좋아집니다. 숫자·경험·결과가 들어가면 훅이 강해져요.</div>
+      <div class="chips" style="margin-top:10px">
+        <button class="chip ex" data-ex="퇴근 후 두 시간으로 시작한 부업, 3개월 만에 월급 절반까지">
+          <span class="em">예시</span>부업 3개월 썰</button>
+        <button class="chip ex" data-ex="중학생 아들이 수학 시험에서 30점 오른 실제 공부법">
+          <span class="em">예시</span>수학 성적 올린 법</button>
+        <button class="chip ex" data-ex="만 원짜리 무료 앱으로 매달 20만원 아끼는 생활 꿀팁">
+          <span class="em">예시</span>생활비 절약 꿀팁</button>
+      </div>
+
+      <div style="margin-top:18px" class="row">
+        <div>
+          <label class="f">톤</label>
+          <div class="chips" id="toneChips">
+            <button class="chip" data-tone="유머 썰" aria-pressed="true"><span class="em">😅</span>유머 썰</button>
+            <button class="chip" data-tone="정보 꿀팁" aria-pressed="false"><span class="em">💡</span>정보 꿀팁</button>
+            <button class="chip" data-tone="제품 리뷰" aria-pressed="false"><span class="em">📦</span>제품 리뷰</button>
+          </div>
+        </div>
+        <div>
+          <label class="f">목소리</label>
+          <div class="chips" id="voiceChips">
+            <button class="chip" data-voice="ko-KR-InJoonNeural" aria-pressed="true"><span class="em">🧑</span>남성 (인준)</button>
+            <button class="chip" data-voice="ko-KR-SunHiNeural" aria-pressed="false"><span class="em">👩</span>여성 (선히)</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="row" style="margin-top:18px">
+        <button class="btn primary" id="btnGenerate" style="flex:2 1 260px">✨ AI 대본 생성</button>
+        <button class="btn ghost" id="btnManual" style="flex:1 1 160px">직접 쓰기</button>
+      </div>
+
+      <div class="note" id="genLog" style="margin-top:14px; display:none"></div>
+      <div class="note warn" id="noKeyNote" style="margin-top:14px">
+        <div>Gemini API 키가 없으면 <b>직접 쓰기</b>로 대본을 만들 수 있어요. 키는 ⚙ 설정에서 한 번만 넣으면 이 브라우저에만 저장됩니다.</div>
+      </div>
+    </section>
+
+    <!-- STEP 2 -->
+    <section class="card hidden" id="card-script">
+      <h2>2. 대본 다듬기</h2>
+      <p class="sub">나레이션은 목소리로, 자막은 화면에 크게, 비주얼 프롬프트는 배경 이미지 검색어로 쓰입니다.</p>
+
+      <label class="f" for="hookTitle">영상 훅 제목 <span style="color:var(--muted);font-weight:700">(상단 노란 배너)</span></label>
+      <input type="text" id="hookTitle" maxlength="40" placeholder="예) 월급 300만원 부업 썰" />
+
+      <div class="cuts" id="cuts" style="margin-top:16px"></div>
+
+      <div class="row" style="margin-top:14px">
+        <button class="btn ghost" id="btnAddCut" style="flex:1 1 140px">+ 컷 추가</button>
+        <button class="btn ghost" id="btnRegen" style="flex:1 1 160px">↻ AI로 다시 생성</button>
+        <button class="btn primary" id="btnToRender" style="flex:2 1 240px">이 대본으로 렌더링 →</button>
+      </div>
+    </section>
+
+    <!-- STEP 3 -->
+    <section class="card hidden" id="card-render">
+      <h2>3. 영상 렌더링</h2>
+      <p class="sub">GitHub Actions에서 실제 MP4를 만듭니다. 보통 2~5분 걸리고, 창을 닫아도 계속 진행됩니다.</p>
+
+      <div class="kv"><span>해상도 / 프레임</span><b>1080×1920 · 30fps</b></div>
+      <div class="kv"><span>컷 수 / 예상 길이</span><b id="sumCuts">-</b></div>
+      <div class="kv"><span>목소리 / 속도</span><b id="sumVoice">-</b></div>
+      <div class="kv"><span>비주얼 소스</span><b id="sumVisual">Pexels → AI 이미지 → 그라데이션</b></div>
+
+      <div class="note" id="renderNote" style="margin-top:16px">
+        렌더가 끝나면 <b>GitHub Release</b>에 MP4가 올라가고, 아이폰 사파리에서 바로 재생·저장할 수 있습니다.
+      </div>
+
+      <div class="steps" id="stepList" style="margin-top:14px"></div>
+
+      <div class="mobile-only" id="mobileProgress" style="margin-top:14px; display:none">
+        <div style="display:flex; justify-content:space-between; font-size:12.5px; font-weight:800">
+          <span id="mpLabel">렌더 준비</span><span id="mpPct">0%</span>
+        </div>
+        <div style="height:8px; background:#eceff7; border-radius:99px; overflow:hidden; margin-top:6px">
+          <div id="mpBar" style="height:100%; width:0; background:linear-gradient(90deg,#4a68ff,#3b53ec); transition:width .4s"></div>
+        </div>
+      </div>
+
+      <div class="row" style="margin-top:16px">
+        <button class="btn primary" id="btnRender" style="flex:2 1 240px">🎬 렌더링 시작</button>
+        <button class="btn ghost" id="btnBack2" style="flex:1 1 140px">← 대본 수정</button>
+      </div>
+      <div id="runLinks" style="margin-top:12px"></div>
+    </section>
+
+    <!-- STEP 4 -->
+    <section class="card hidden" id="card-result">
+      <h2>4. 완성 🎬</h2>
+      <p class="sub">영상 확인 → 캡션 복사 → 그대로 업로드하세요.</p>
+
+      <div class="video-shell"><video id="player" controls playsinline preload="metadata"></video></div>
+      <div class="dl-row">
+        <a class="btn primary" id="btnDownload" style="flex:2 1 240px" target="_blank" rel="noopener">⬇ MP4 다운로드</a>
+        <a class="btn ghost" id="btnRelease" style="flex:1 1 160px" target="_blank" rel="noopener">Release 열기</a>
+      </div>
+      <div class="note" id="playerNote" style="margin-top:12px; display:none"></div>
+
+      <h3 style="margin:24px 0 4px; font-size:15px">업로드용 캡션 <span class="badge on" style="margin-left:6px">1클릭 복사</span></h3>
+      <p class="sub" style="margin-bottom:12px">플랫폼별로 톤을 다르게 만들었습니다.</p>
+      <div class="cap-grid" id="captionGrid"></div>
+
+      <div class="row" style="margin-top:20px">
+        <button class="btn dark" id="btnNew" style="flex:2 1 240px">+ 새 영상 만들기</button>
+        <button class="btn ghost" id="btnAgain" style="flex:1 1 160px">같은 대본 다시 렌더</button>
+      </div>
+    </section>
+  </main>
+
+  <!-- 우측 프리뷰 -->
+  <aside class="stage">
+    <div class="phone-wrap">
+      <div class="phone-top"><span>9:16 PREVIEW</span><span class="nav"><button id="pPrev" aria-label="이전 컷">‹</button><span id="previewCut">CUT 1 / 1</span><button id="pNext" aria-label="다음 컷">›</button></span></div>
+      <div class="phone" id="phone">
+        <div class="bg"></div>
+        <div class="scrim"></div>
+        <div class="prog" id="phoneProg"></div>
+        <div class="hook" id="phoneHook">주제를 입력하면 여기에 훅 제목이 나옵니다</div>
+        <div class="sub" id="phoneSub">자막 미리보기</div>
+        <div class="empty-hint" id="phoneEmpty" style="display:none"></div>
+        <div class="rendering hidden" id="phoneRendering">
+          <div>
+            <div class="ring"></div>
+            <div class="pct" id="renderPct">0%</div>
+            <div class="lbl" id="renderLbl">영상 렌더링 중</div>
+          </div>
+        </div>
+      </div>
+      <div class="phone-foot">
+        <span class="live"><i></i>LIVE PREVIEW</span>
+        <span id="previewState">편집 중</span>
+      </div>
+    </div>
+
+    <div class="meta-box">
+      <h4>이번 영상</h4>
+      <div class="kv"><span>컷</span><b id="mCuts">0</b></div>
+      <div class="kv"><span>예상 길이</span><b id="mDur">0초</b></div>
+      <div class="kv"><span>해상도</span><b>1080×1920</b></div>
+      <div class="kv"><span>비용</span><b style="color:#0b7a4b">0원</b></div>
+    </div>
+  </aside>
+</div>
+
+<!-- 설정 모달 -->
+<div class="modal" id="settings">
+  <div class="sheet">
+    <div class="sheet-h">
+      <h3>설정</h3>
+      <button class="icon-btn" data-close="settings">닫기</button>
+    </div>
+    <div class="sheet-b">
+      <div class="grp">
+        <h4>🔑 Gemini API 키 <span class="badge opt">선택</span></h4>
+        <input type="password" id="sGemini" placeholder="AIza..." autocomplete="off" />
+        <div class="hint">없어도 됩니다. 있으면 대본·캡션을 AI가 자동 작성합니다. (무료 키: aistudio.google.com/apikey)</div>
+      </div>
+      <div class="grp">
+        <h4>🐙 GitHub 토큰 <span class="badge">필수</span></h4>
+        <input type="password" id="sPat" placeholder="github_pat_..." autocomplete="off" />
+        <div class="hint">Fine-grained 토큰 · 저장소 <b>shorts-maker</b> · 권한 <b>Actions: Read and write</b>, <b>Contents: Read</b></div>
+        <div class="row" style="margin-top:8px">
+          <a class="btn ghost sm" id="linkPat" target="_blank" rel="noopener" style="flex:1">토큰 만들기 →</a>
+          <button class="btn ghost sm" id="btnTest" style="flex:1">연결 테스트</button>
+        </div>
+      </div>
+      <div class="grp">
+        <h4>🖼 Pexels API 키 <span class="badge opt">선택</span></h4>
+        <input type="password" id="sPexels" placeholder="무료 키 (pexels.com/api)" autocomplete="off" />
+        <div class="hint">있으면 실제 영상/사진을 배경으로 씁니다(품질 ↑). GitHub 저장소 → Settings → Secrets and variables → Actions에 <b>PEXELS_API_KEY</b>로 추가하세요.</div>
+        <button class="btn ghost sm" id="btnCopyPexels" style="margin-top:8px">PEXELS_API_KEY 이름 복사</button>
+      </div>
+      <div class="grp">
+        <h4>📦 저장소</h4>
+        <input type="text" id="sRepo" placeholder="twinspapa84/shorts-maker" />
+      </div>
+      <div class="note">키는 <b>이 브라우저(localStorage)</b>에만 저장되고, Google·GitHub로만 전송됩니다. 서버는 없습니다.</div>
+      <button class="btn primary block" id="btnSave">저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- 가이드 모달 -->
+<div class="modal" id="help">
+  <div class="sheet">
+    <div class="sheet-h">
+      <h3>처음 한 번만 하면 되는 설정</h3>
+      <button class="icon-btn" data-close="help">닫기</button>
+    </div>
+    <div class="sheet-b">
+      <div class="note">아래 3개만 되면 끝입니다. 상태 확인 버튼으로 한 번에 점검할 수 있어요.</div>
+      <div class="grp">
+        <h4>1) GitHub Pages 켜기</h4>
+        <div class="hint">저장소 → Settings → Pages → Source: <b>Deploy from a branch</b>, Branch: <b>main</b> / <b>/docs</b> → Save. 1~2분 뒤 이 주소로 접속됩니다.</div>
+        <a class="btn ghost sm" id="linkPages" target="_blank" rel="noopener" style="margin-top:8px">Pages 설정 열기 →</a>
+      </div>
+      <div class="grp">
+        <h4>2) 렌더 워크플로 파일 만들기</h4>
+        <div class="hint">아래 버튼으로 새 파일을 열고, <b>YAML 복사</b>한 내용을 그대로 붙여넣고 Commit 하세요. 경로: <code>.github/workflows/render-shorts.yml</code></div>
+        <div class="row" style="margin-top:8px">
+          <a class="btn ghost sm" id="linkWorkflow" target="_blank" rel="noopener" style="flex:1">파일 만들기 →</a>
+          <button class="btn ghost sm" id="btnCopyYaml" style="flex:1">YAML 복사</button>
+        </div>
+      </div>
+      <div class="grp">
+        <h4>3) GitHub 토큰 넣기</h4>
+        <div class="hint">⚙ 설정에서 Fine-grained 토큰을 넣습니다. 만료 90일 권장.</div>
+        <button class="btn ghost sm" id="btnCheckAll" style="margin-top:8px">상태 확인</button>
+        <div id="checkResult" class="hint" style="margin-top:10px"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 예시 영상 모달 -->
+<div class="modal" id="demo">
+  <div class="sheet" style="max-width:420px">
+    <div class="sheet-h">
+      <h3>이렇게 나와요 · 18초 예시</h3>
+      <button class="icon-btn" data-close="demo">닫기</button>
+    </div>
+    <div class="sheet-b" style="gap:10px">
+      <div class="video-shell" style="padding:8px">
+        <video src="demo/sample.mp4" poster="demo/sample-thumb.jpg" controls playsinline preload="metadata"></video>
+      </div>
+      <div class="hint">AI 이미지 + Ken Burns 무빙 + 나레이션 + 자막으로 자동 생성된 결과입니다.</div>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+/* ══════════════════════════════════════════════════════════
+   상태
+   ══════════════════════════════════════════════════════════ */
+const LS_KEY = 'shortsStudio.v2';
+const DEFAULT_REPO = 'twinspapa84/shorts-maker';
+
+const S = {
+  settings: { gemini:'', pat:'', pexels:'', repo: DEFAULT_REPO },
+  topic:'', tone:'유머 썰', voice:'ko-KR-InJoonNeural',
+  title:'', cuts:[], step:1, stage:1,
+  run:null, // {id, url, number, status, conclusion}
+  history:[]
+};
+
+function save(){ try{ localStorage.setItem(LS_KEY, JSON.stringify(S)); }catch(e){} }
+function load(){
+  try{
+    const raw = localStorage.getItem(LS_KEY);
+    if(!raw) return;
+    const o = JSON.parse(raw);
+    Object.assign(S, o);
+    S.settings = Object.assign({gemini:'',pat:'',pexels:'',repo:DEFAULT_REPO}, o.settings||{});
+    if(!Array.isArray(S.cuts)) S.cuts=[];
+    if(!Array.isArray(S.history)) S.history=[];
+  }catch(e){}
+}
+
+const $ = (s,r=document)=>r.querySelector(s);
+const $$ = (s,r=document)=>[...r.querySelectorAll(s)];
+const esc = s => String(s??'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const sleep = ms => new Promise(r=>setTimeout(r,ms));
+
+function toast(msg, ms=2200){
+  const t = $('#toast'); t.textContent = msg; t.classList.add('show');
+  clearTimeout(t._t); t._t = setTimeout(()=>t.classList.remove('show'), ms);
+}
+async function copy(text){
+  try{ await navigator.clipboard.writeText(text); toast('복사됐어요'); }
+  catch(e){
+    const ta=document.createElement('textarea'); ta.value=text; ta.style.position='fixed'; ta.style.opacity='0';
+    document.body.appendChild(ta); ta.select();
+    try{ document.execCommand('copy'); toast('복사됐어요'); }catch(_){ toast('복사 실패 · 길게 눌러 복사하세요'); }
+    ta.remove();
+  }
+}
+
+/* ══════════════════════════════════════════════════════════
+   UI: 단계 전환
+   ══════════════════════════════════════════════════════════ */
+const STAGES = ['대본 만들기','스크립트 생성 중','영상 렌더링 중','완성'];
+
+function goStep(n, stage){
+  S.step = n; S.stage = stage ?? Math.min(n,3);
+  if(n===3 && previewIdx>0){ previewIdx = 0; }
+  ['#card-topic','#card-script','#card-render','#card-result'].forEach((sel,i)=>{
+    $(sel).classList.toggle('hidden', i+1 !== n);
+  });
+  $$('.stepper .st').forEach(el=>{
+    const k = +el.dataset.st;
+    el.classList.toggle('on', k === S.stage);
+    el.classList.toggle('ok', k < S.stage);
+  });
+  $$('.rail a').forEach(a=>{
+    const k = +a.dataset.rail;
+    a.classList.toggle('active', k === n);
+    a.classList.toggle('done', k < n);
+  });
+  if(n===3) syncRenderSummary();
+  renderPreview();
+  window.scrollTo({top:0, behavior:'smooth'});
+  save();
+}
+
+/* ══════════════════════════════════════════════════════════
+   프리뷰
+   ══════════════════════════════════════════════════════════ */
+let previewIdx = 0;
+
+function estimateDur(text){
+  const chars = (text||'').replace(/\s/g,'').length;
+  return Math.max(2.4, Math.min(14, chars/7.2 + 0.8)); // +12% 속도 가정
+}
+
+function renderPreview(){
+  const cuts = S.cuts.length ? S.cuts : [{subtitle:'자막 미리보기', narration:''}];
+  previewIdx = Math.min(previewIdx, cuts.length-1);
+  const cut = cuts[previewIdx];
+  $('#phoneHook').textContent = S.title || '주제를 입력하면 여기에 훅 제목이 나옵니다';
+  $('#phoneHook').style.opacity = S.title ? 1 : .55;
+  $('#phoneSub').textContent = cut.subtitle || cut.narration || '자막 미리보기';
+  $('#previewCut').textContent = `CUT ${previewIdx+1} / ${cuts.length}`;
+
+  const prog = $('#phoneProg');
+  prog.innerHTML = cuts.map((_,i)=>`<i class="${i<previewIdx?'done':(i===previewIdx?'cur':'')}"></i>`).join('');
+
+  const total = S.cuts.reduce((a,c)=>a+estimateDur(c.narration||c.subtitle||''),0);
+  $('#mCuts').textContent = S.cuts.length + '컷';
+  $('#mDur').textContent = `약 ${Math.round(total)}초`;
+  $('#previewState').textContent = S.run && S.run.status==='running' ? '렌더링 중' : '편집 중';
+}
+
+/* ══════════════════════════════════════════════════════════
+   컷 편집
+   ══════════════════════════════════════════════════════════ */
+function renderCuts(){
+  const wrap = $('#cuts');
+  if(!S.cuts.length){ wrap.innerHTML = '<div class="hint">아직 컷이 없습니다. “AI 대본 생성” 또는 “+ 컷 추가”를 눌러주세요.</div>'; return; }
+  wrap.innerHTML = S.cuts.map((c,i)=>`
+    <div class="cut" data-i="${i}">
+      <div class="cut-head">
+        <span class="idx">${i+1}</span>
+        <span style="font-size:12.5px;font-weight:800;color:#5b6274">CUT ${i+1}</span>
+        <span class="dur">약 ${estimateDur(c.narration||c.subtitle||'').toFixed(1)}초</span>
+        <button class="del" data-del="${i}">삭제</button>
+      </div>
+      <div class="cut-body">
+        <div>
+          <span class="mini">나레이션 (목소리로 읽을 문장)</span>
+          <textarea rows="2" data-f="narration" data-i="${i}" placeholder="말하듯 자연스럽게 1~2문장">${esc(c.narration)}</textarea>
+        </div>
+        <div class="two">
+          <div>
+            <span class="mini">화면 자막 (짧고 강하게)</span>
+            <input type="text" data-f="subtitle" data-i="${i}" maxlength="60" value="${esc(c.subtitle)}" placeholder="예) 첫 수익은 딱 만 원" />
+          </div>
+          <div>
+            <span class="mini">비주얼 프롬프트 (영어)</span>
+            <input type="text" data-f="visual_query" data-i="${i}" value="${esc(c.visual_query)}" placeholder="korean office at night, cinematic" />
+          </div>
+        </div>
+      </div>
+    </div>`).join('');
+}
+
+$('#cuts').addEventListener('input', e=>{
+  const t = e.target; const i = +t.dataset.i;
+  if(Number.isNaN(i) || !S.cuts[i]) return;
+  S.cuts[i][t.dataset.f] = t.value;
+  if(t.dataset.f === 'subtitle' || t.dataset.f === 'narration'){ previewIdx = i; renderPreview(); }
+  save();
+});
+$('#cuts').addEventListener('click', e=>{
+  const b = e.target.closest('[data-del]');
+  if(!b) return;
+  S.cuts.splice(+b.dataset.del,1);
+  renderCuts(); renderPreview(); save();
+});
+$('#hookTitle').addEventListener('input', e=>{ S.title = e.target.value; renderPreview(); save(); });
+$('#topic').addEventListener('input', e=>{ S.topic = e.target.value; save(); });
+
+$('#btnAddCut').onclick = ()=>{
+  S.cuts.push({narration:'', subtitle:'', visual_query:''});
+  renderCuts(); renderPreview(); save();
+};
+$('#btnToRender').onclick = ()=>{
+  if(!S.cuts.length){ toast('컷이 없습니다'); return; }
+  if(!S.cuts.some(c=>c.narration.trim()||c.subtitle.trim())){ toast('나레이션을 채워주세요'); return; }
+  S.title = S.title || $('#hookTitle').value || '쇼츠';
+  goStep(3, 2);
+};
+
+/* ══════════════════════════════════════════════════════════
+   톤/보이스 칩
+   ══════════════════════════════════════════════════════════ */
+$$('#toneChips .chip').forEach(b=>b.onclick=()=>{
+  $$('#toneChips .chip').forEach(x=>x.setAttribute('aria-pressed','false'));
+  b.setAttribute('aria-pressed','true'); S.tone = b.dataset.tone; save();
+});
+$$('#voiceChips .chip').forEach(b=>b.onclick=()=>{
+  $$('#voiceChips .chip').forEach(x=>x.setAttribute('aria-pressed','false'));
+  b.setAttribute('aria-pressed','true'); S.voice = b.dataset.voice; save();
+});
+$$('.chip.ex').forEach(b=>b.onclick=()=>{
+  $('#topic').value = b.dataset.ex; S.topic = b.dataset.ex; save();
+  $('#topic').focus();
+});
+
+/* ══════════════════════════════════════════════════════════
+   Gemini
+   ══════════════════════════════════════════════════════════ */
+const GEMINI_MODELS = ['gemini-2.5-flash','gemini-2.0-flash','gemini-1.5-flash'];
+
+function extractJson(text){
+  let t = String(text||'').trim();
+  t = t.replace(/^```(?:json)?/i,'').replace(/```$/,'').trim();
+  const a = t.indexOf('{'), b = t.lastIndexOf('}');
+  if(a>=0 && b>a) t = t.slice(a,b+1);
+  return JSON.parse(t);
+}
+
+async function gemini(prompt, {json=true, logEl=null}={}){
+  const key = S.settings.gemini.trim();
+  if(!key) throw new Error('NO_KEY');
+  let lastErr;
+  for(const model of GEMINI_MODELS){
+    for(let attempt=0; attempt<2; attempt++){
+      try{
+        if(logEl) logEl.textContent = `Gemini ${model} 호출 중…`;
+        const body = {
+          contents:[{role:'user', parts:[{text:prompt}]}],
+          generationConfig: { temperature:1.0, maxOutputTokens: 2048 }
+        };
+        if(json) body.generationConfig.responseMimeType = 'application/json';
+        const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`,{
+          method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)
+        });
+        if(!r.ok){
+          const txt = await r.text();
+          const err = new Error(`${model} HTTP ${r.status} ${txt.slice(0,160)}`);
+          if([429,500,503,404].includes(r.status)) throw err;
+          throw err;
+        }
+        const j = await r.json();
+        const parts = j?.candidates?.[0]?.content?.parts || [];
+        const text = parts.map(p=>p.text||'').join('').trim();
+        if(!text) throw new Error('빈 응답');
+        return json ? extractJson(text) : text;
+      }catch(e){
+        lastErr = e;
+        if(logEl) logEl.textContent = `${model} 실패 → 다음 모델로 (${e.message.slice(0,60)})`;
+        await sleep(900 + attempt*900);
+      }
+    }
+  }
+  throw lastErr || new Error('Gemini 호출 실패');
+}
+
+function scriptPrompt(){
+  return `너는 한국 유튜브 쇼츠·릴스 전문 대본 작가다. 아래 주제로 9:16 세로 쇼츠 대본을 쓴다.
+
+주제: ${S.topic || S.title}
+톤: ${S.tone}
+
+조건:
+- cuts는 5~6개. 전체 35~45초 분량(한 컷 6~9초).
+- narration: 실제로 말하는 자연스러운 구어체 1~2문장, 45자 안팎. 첫 컷은 3초 안에 시선을 잡는 훅.
+- subtitle: 화면에 크게 띄울 10~22자. 핵심만. 마침표·따옴표·말줄임표 없이.
+- visual_query: 배경 이미지용 영어 프롬프트 8~14단어. 인물/장소/사물 + 분위기·조명. 이미지 안에 글자가 들어가면 안 됨.
+- title: 상단 배너에 들어갈 훅 제목 12~22자.
+- 마지막 컷은 억지 CTA 대신 여운 있는 마무리나 바로 써먹을 팁.
+- AI 말투 금지: "여러분", "지금부터", "알아보겠습니다" 같은 상투어 쓰지 말 것.
+
+JSON만 출력:
+{"title":"...","cuts":[{"narration":"...","subtitle":"...","visual_query":"..."}]}`;
+}
+
+$('#btnGenerate').onclick = async ()=>{
+  const topic = $('#topic').value.trim();
+  if(!topic){ toast('주제를 먼저 적어주세요'); $('#topic').focus(); return; }
+  S.topic = topic;
+  const log = $('#genLog'); log.style.display='flex'; log.textContent='대본 생성 중…';
+  $('#btnGenerate').disabled = true;
+  goStep(2, 2);
+  try{
+    const data = await gemini(scriptPrompt(), {json:true, logEl:log});
+    const cuts = (data.cuts||[]).filter(c=>c && (c.narration||c.subtitle)).slice(0,8);
+    if(!cuts.length) throw new Error('대본이 비어 있습니다');
+    S.title = (data.title||'').slice(0,40) || topic.slice(0,22);
+    S.cuts = cuts.map(c=>({
+      narration:String(c.narration||'').trim(),
+      subtitle:String(c.subtitle||'').trim(),
+      visual_query:String(c.visual_query||'').trim()
+    }));
+    $('#hookTitle').value = S.title;
+    renderCuts(); renderPreview(); save();
+    log.className='note ok'; log.textContent='대본 완성! 아래에서 문장을 다듬고 렌더링하세요.';
+    goStep(2, 1);
+    setTimeout(()=>{ log.style.display='none'; }, 4000);
+  }catch(e){
+    log.className='note warn';
+    if(e.message==='NO_KEY'){
+      log.innerHTML='Gemini 키가 없어 AI 생성을 건너뜁니다. <b>직접 쓰기</b>로 진행하세요. (⚙ 설정에서 키를 넣으면 자동 생성)';
+      if(!S.cuts.length) startManual();
+    }else{
+      log.innerHTML = `AI 생성 실패: ${esc(e.message.slice(0,120))}<br>잠시 뒤 다시 시도하거나 <b>직접 쓰기</b>로 진행하세요.`;
+    }
+    goStep(S.cuts.length?2:1, 1);
+  }finally{
+    $('#btnGenerate').disabled = false;
+    setTimeout(()=>{ if(log.textContent.includes('대본 완성')) log.style.display='none'; }, 4200);
+  }
+};
+
+$('#btnManual').onclick = ()=>{ startManual(); };
+
+function startManual(){
+  if(!S.cuts.length){
+    S.cuts = [
+      {narration:'', subtitle:'', visual_query:'korean city street at night, cinematic'},
+      {narration:'', subtitle:'', visual_query:'person working at desk at night, warm light'},
+      {narration:'', subtitle:'', visual_query:'hand holding phone with chart, close up'}
+    ];
+  }
+  if(!S.title){ S.title = ($('#topic').value||'').trim().slice(0,22) || '나의 쇼츠'; }
+  $('#hookTitle').value = S.title;
+  renderCuts(); renderPreview(); save();
+  goStep(2, 1);
+  toast('직접 쓰기 모드 — 나레이션을 채워주세요');
+}
+
+$('#btnRegen').onclick = ()=>{ $('#btnGenerate').click(); };
+
+/* ══════════════════════════════════════════════════════════
+   GitHub API
+   ══════════════════════════════════════════════════════════ */
+function repo(){ return (S.settings.repo||DEFAULT_REPO).trim().replace(/^https?:\/\/github.com\//,'').replace(/\.git$/,'').replace(/\/$/,''); }
+function ghHeaders(){
+  const h = {'Accept':'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28'};
+  if(S.settings.pat.trim()) h['Authorization'] = `Bearer ${S.settings.pat.trim()}`;
+  return h;
+}
+async function gh(path, opts={}){
+  const r = await fetch(`https://api.github.com${path}`, {...opts, headers:{...ghHeaders(), ...(opts.headers||{})}});
+  const text = await r.text();
+  let data = null; try{ data = text? JSON.parse(text):null; }catch(e){}
+  if(!r.ok){
+    const err = new Error((data && (data.message||data.error)) || `HTTP ${r.status}`);
+    err.status = r.status; err.data = data; throw err;
+  }
+  return data;
+}
+
+function payload(){
+  return {
+    title: S.title || '쇼츠',
+    voice: S.voice,
+    rate: '+12%',
+    tone: S.tone,
+    cuts: S.cuts.filter(c=>c.narration.trim()||c.subtitle.trim()).map(c=>({
+      narration: c.narration.trim() || c.subtitle.trim(),
+      subtitle: c.subtitle.trim() || c.narration.trim(),
+      visual_query: c.visual_query.trim()
+    }))
+  };
+}
+
+/* ══════════════════════════════════════════════════════════
+   렌더
+   ══════════════════════════════════════════════════════════ */
+let pollTimer = null;
+
+function setRenderStages(list){
+  $('#stepList').innerHTML = list.map(s=>{
+    const ic = s.state==='ok' ? '✓' : s.state==='run' ? '◐' : s.state==='err' ? '!' : '○';
+    return `<div class="st ${s.state||''}"><span class="ic">${ic}</span>${esc(s.name)}</div>`;
+  }).join('');
+}
+
+function setPct(p, label){
+  const v = Math.max(0,Math.min(100,Math.round(p)));
+  $('#renderPct').textContent = `${v}%`;
+  if(label) $('#renderLbl').textContent = label;
+  const mp = $('#mobileProgress');
+  if(mp){ mp.style.display = (v>0 && v<101) ? 'block' : 'none'; $('#mpPct').textContent = `${v}%`; $('#mpBar').style.width = `${v}%`; if(label) $('#mpLabel').textContent = label; }
+}
+
+$('#btnRender').onclick = startRender;
+$('#btnAgain').onclick = ()=>{ goStep(3,2); startRender(); };
+
+async function startRender(){
+  if(!S.settings.pat.trim()){ openSettings(); toast('GitHub 토큰을 먼저 넣어주세요'); return; }
+  const p = payload();
+  if(!p.cuts.length){ toast('컷이 비어 있습니다'); goStep(2); return; }
+
+  $('#btnRender').disabled = true;
+  $('#phoneRendering').classList.remove('hidden');
+  setPct(2,'요청 보내는 중');
+  setRenderStages([{name:'GitHub에 렌더 요청', state:'run'},{name:'워크플로 시작 대기', state:''}]);
+  $('#runLinks').innerHTML = '';
+
+  try{
+    const before = await gh(`/repos/${repo()}/actions/runs?event=workflow_dispatch&per_page=8`)
+      .then(d=>new Set((d.workflow_runs||[]).map(r=>r.id))).catch(()=>new Set());
+    const t0 = Date.now()/1000;
+
+    await gh(`/repos/${repo()}/actions/workflows/render-shorts.yml/dispatches`, {
+      method:'POST',
+      body: JSON.stringify({ ref:'main', inputs:{ payload_json: JSON.stringify(p) } })
+    });
+
+    setRenderStages([{name:'GitHub에 렌더 요청', state:'ok'},{name:'워크플로 시작 대기', state:'run'}]);
+    setPct(5,'워크플로 시작 대기');
+
+    let run = null;
+    for(let i=0;i<40 && !run;i++){
+      await sleep(i<8?2500:5000);
+      const d = await gh(`/repos/${repo()}/actions/runs?event=workflow_dispatch&per_page=10`);
+      const cand = (d.workflow_runs||[]).filter(r=>!before.has(r.id) && new Date(r.created_at).getTime()/1000 >= t0-180);
+      if(cand.length) run = cand[0];
+    }
+    if(!run) throw new Error('실행을 찾지 못했습니다. GitHub Actions 탭을 확인해 주세요.');
+
+    S.run = {id:run.id, url:run.html_url, number:run.run_number, status:run.status, conclusion:null};
+    $('#phoneRendering').classList.remove('hidden');
+    pollRun(run.id);
+  }catch(e){
+    $('#btnRender').disabled = false;
+    $('#phoneRendering').classList.add('hidden');
+    setPct(0,'');
+    if(e.status === 404){
+      setRenderStages([{name:'렌더 워크플로 파일이 없습니다', state:'err'}]);
+      $('#runLinks').innerHTML = `<div class="note warn">아직 <b>.github/workflows/render-shorts.yml</b> 파일이 없습니다. <b>설정 가이드</b>의 2번 단계를 1분만 따라 해 주세요. <button class="btn ghost sm" id="quickGuide" style="margin-top:8px">가이드 열기</button></div>`;
+      $('#quickGuide').onclick = ()=>openModal('help');
+      return;
+    }
+    if(e.status === 401 || e.status === 403){
+      setRenderStages([{name:'토큰 권한 부족 (Actions: Read and write 필요)', state:'err'}]);
+      $('#runLinks').innerHTML = `<div class="note warn">토큰 권한을 확인해 주세요: <b>Actions: Read and write</b>, <b>Contents: Read</b>. 토큰이 만료됐다면 새로 발급하세요.</div>`;
+      return;
+    }
+    setRenderStages([{name:'렌더 요청 실패', state:'err'}]);
+    $('#runLinks').innerHTML = `<div class="note warn">${esc(e.message)}</div>`;
+    toast('렌더 요청 실패');
+  }
+}
+
+async function pollRun(id){
+  clearTimeout(pollTimer);
+  try{
+    const run = await gh(`/repos/${repo()}/actions/runs/${id}`);
+    S.run = {id, url:run.html_url, number:run.run_number, status:run.status, conclusion:run.conclusion};
+    const jobs = await gh(`/repos/${repo()}/actions/runs/${id}/jobs`).catch(()=>({jobs:[]}));
+    const job = (jobs.jobs||[])[0];
+
+    if(job){
+      const steps = job.steps||[];
+      const done = steps.filter(s=>s.conclusion==='success').length;
+      const totalSteps = steps.length || 8;
+      const base = run.status==='queued' ? 3 : 8;
+      const pct = Math.min(96, base + (done/Math.max(totalSteps,1))*88);
+      setPct(pct, run.status==='queued' ? '대기열에서 기다리는 중' : '영상 렌더링 중');
+      setRenderStages(steps.map(s=>({
+        name: s.name,
+        state: s.conclusion==='success' ? 'ok' : s.conclusion==='failure' ? 'err' : s.status==='in_progress' ? 'run' : ''
+      })));
+    }else{
+      setPct(run.status==='queued'?4:10, run.status==='queued'?'대기열에서 기다리는 중':'준비 중');
+    }
+
+    $('#runLinks').innerHTML = `<a class="btn ghost sm" href="${run.html_url}" target="_blank" rel="noopener">GitHub Actions에서 보기 →</a>`;
+
+    if(run.status === 'completed'){
+      if(run.conclusion === 'success'){ await onRenderDone(run); }
+      else {
+        clearTimeout(pollTimer);
+        $('#btnRender').disabled = false;
+        $('#phoneRendering').classList.add('hidden');
+        setPct(0,'');
+        setRenderStages([{name:`렌더 실패 (${run.conclusion})`, state:'err'}]);
+        $('#runLinks').innerHTML = `<div class="note warn">렌더가 실패했습니다. 로그를 확인해 주세요.<br><a href="${run.html_url}" target="_blank" rel="noopener">실패 로그 보기 →</a><br>흔한 원인: 워크플로 파일 오타 · 저장소 Actions 비활성 · 네트워크 일시 오류(다시 시도)</div>`;
+      }
+      return;
+    }
+    pollTimer = setTimeout(()=>pollRun(id), 5000);
+  }catch(e){
+    pollTimer = setTimeout(()=>pollRun(id), 8000);
+  }
+}
+
+async function onRenderDone(run){
+  clearTimeout(pollTimer);
+  setPct(100,'완성!');
+  setRenderStages([{name:'렌더 완료', state:'ok'}]);
+  const tag = `render-${run.run_number}`;
+  let url = `https://github.com/${repo()}/releases/download/${tag}/shorts_final.mp4`;
+  let releaseUrl = `https://github.com/${repo()}/releases/tag/${tag}`;
+  try{
+    const rel = await gh(`/repos/${repo()}/releases/tags/${tag}`);
+    const asset = (rel.assets||[]).find(a=>a.name==='shorts_final.mp4');
+    if(asset){ url = asset.browser_download_url; releaseUrl = rel.html_url; }
+  }catch(e){}
+
+  $('#player').src = url;
+  $('#btnDownload').href = url;
+  $('#btnRelease').href = releaseUrl;
+  $('#playerNote').style.display='flex';
+  $('#playerNote').className='note';
+  $('#playerNote').innerHTML = '영상이 안 보이면 <b>MP4 다운로드</b>를 눌러 사진 앱에 저장하세요. (아이폰 사파리: 길게 눌러 저장)';
+
+  S.history = [{url, releaseUrl, at:new Date().toISOString(), title:S.title}, ...S.history].slice(0,10);
+  save();
+
+  await buildCaptions();
+  $('#phoneRendering').classList.add('hidden');
+  $('#btnRender').disabled = false;
+  goStep(4, 4);
+  toast('영상 완성! 바로 다운로드할 수 있어요', 3500);
+}
+
+/* ══════════════════════════════════════════════════════════
+   캡션
+   ══════════════════════════════════════════════════════════ */
+function baseTags(){
+  const t = (S.topic + ' ' + S.title).replace(/[^가-힣A-Za-z0-9 ]/g,' ').split(/\s+/).filter(w=>w.length>1);
+  const uniq = [...new Set(t)].slice(0,4);
+  const common = ['쇼츠','릴스','숏폼','부업','정보'];
+  return [...uniq.map(w=>'#'+w), ...common.map(w=>'#'+w)];
+}
+
+function templateCaptions(){
+  const lines = S.cuts.map(c=>c.subtitle).filter(Boolean);
+  const body = lines.slice(0,4).join('\n');
+  const tags = baseTags();
+  return {
+    instagram: `${S.title}\n\n${body}\n\n${tags.slice(0,8).join(' ')}`,
+    youtube: `${S.title} #Shorts\n\n${lines.join('\n')}\n\n${tags.slice(0,6).join(' ')}`,
+    tiktok: `${S.title} ${tags.slice(0,3).join(' ')}\n${body}\n${tags.slice(0,6).join(' ')}`
+  };
+}
+
+async function buildCaptions(){
+  const grid = $('#captionGrid');
+  grid.innerHTML = '<div class="hint">캡션 만드는 중…</div>';
+  let caps = null;
+  if(S.settings.gemini.trim()){
+    const prompt = `한국어 숏폼 영상 업로드용 캡션을 써라.
+제목: ${S.title}
+주제: ${S.topic}
+톤: ${S.tone}
+자막들: ${S.cuts.map(c=>c.subtitle).filter(Boolean).join(' / ')}
+
+규칙:
+- instagram: 2~3줄, 친근한 구어체, 마지막 줄에 해시태그 6~8개
+- youtube: 제목 + 한 줄 설명 + #Shorts + 해시태그 4~6개
+- tiktok: 아주 짧게(1~2줄) + 해시태그 4~6개
+- AI 말투·이모지 남발 금지, 광고 문구 금지
+JSON만: {"instagram":"...","youtube":"...","tiktok":"..."}`;
+    try{ caps = await gemini(prompt, {json:true}); }catch(e){ caps = null; }
+  }
+  if(!caps || !caps.instagram) caps = templateCaptions();
+
+  const items = [['instagram','Instagram / 릴스'],['youtube','YouTube Shorts'],['tiktok','TikTok']];
+  grid.innerHTML = items.map(([k,label])=>`
+    <div class="cap">
+      <div class="cap-h"><b>${label}</b><button class="btn ghost sm" data-copy="${k}">복사</button></div>
+      <div class="cap-b" id="cap-${k}">${esc(caps[k]||'')}</div>
+    </div>`).join('');
+  grid.onclick = e=>{
+    const b = e.target.closest('[data-copy]');
+    if(b) copy($('#cap-'+b.dataset.copy).textContent);
+  };
+}
+
+/* ══════════════════════════════════════════════════════════
+   설정 / 가이드
+   ══════════════════════════════════════════════════════════ */
+function openModal(id){ $('#'+id).classList.add('open'); }
+function closeModal(id){ $('#'+id).classList.remove('open'); }
+$$('[data-close]').forEach(b=>b.onclick=()=>closeModal(b.dataset.close));
+$$('.modal').forEach(m=>m.addEventListener('click', e=>{ if(e.target===m) m.classList.remove('open'); }));
+
+function openSettings(){
+  $('#sGemini').value = S.settings.gemini;
+  $('#sPat').value = S.settings.pat;
+  $('#sPexels').value = S.settings.pexels;
+  $('#sRepo').value = repo();
+  $('#linkPat').href = `https://github.com/settings/personal-access-tokens/new?name=shorts-maker&target_name=${repo().split('/')[0]}&expires_in=90`;
+  openModal('settings');
+}
+$('#btnSettings').onclick = openSettings;
+$('#btnDemo').onclick = ()=>{ openModal('demo'); const v=$('#demo video'); if(v){ v.currentTime=0; v.play().catch(()=>{}); } };
+$('#btnHelp').onclick = ()=>{ refreshLinks(); openModal('help'); };
+
+$('#btnSave').onclick = ()=>{
+  S.settings.gemini = $('#sGemini').value.trim();
+  S.settings.pat = $('#sPat').value.trim();
+  S.settings.pexels = $('#sPexels').value.trim();
+  S.settings.repo = $('#sRepo').value.trim() || DEFAULT_REPO;
+  save(); closeModal('settings');
+  toast('저장했어요');
+  refreshKeyState();
+};
+
+$('#btnTest').onclick = async ()=>{
+  const btn = $('#btnTest'); btn.disabled = true; btn.textContent='확인 중…';
+  const out = [];
+  try{
+    S.settings.pat = $('#sPat').value.trim(); S.settings.gemini = $('#sGemini').value.trim();
+    if(S.settings.pat){
+      const me = await gh('/user');
+      out.push(`✓ 토큰: @${me.login}`);
+      const r = await gh(`/repos/${repo()}`);
+      out.push(`✓ 저장소: ${r.full_name} (${r.private?'private':'public'})`);
+    } else out.push('• 토큰 없음');
+    if(S.settings.gemini){
+      const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(S.settings.gemini)}`);
+      out.push(r.ok ? '✓ Gemini 키 정상' : `✗ Gemini 키 오류 (${r.status})`);
+    } else out.push('• Gemini 키 없음 (선택)');
+  }catch(e){
+    out.push(`✗ ${e.message}`);
+  }finally{
+    btn.disabled=false; btn.textContent='연결 테스트';
+    $('#checkResult').innerHTML = out.join('<br>');
+    toast('확인 완료');
+  }
+};
+
+function refreshLinks(){
+  const r = repo(), owner = r.split('/')[0];
+  $('#linkPages').href = `https://github.com/${r}/settings/pages`;
+  $('#linkWorkflow').href = `https://github.com/${r}/new/main?filename=.github/workflows/render-shorts.yml`;
+  $('#linkPat').href = `https://github.com/settings/personal-access-tokens/new?name=shorts-maker&target_name=${owner}&expires_in=90`;
+}
+function refreshKeyState(){
+  $('#noKeyNote').style.display = S.settings.gemini ? 'none' : 'flex';
+}
+
+$('#btnCopyYaml').onclick = async ()=>{
+  const r = repo();
+  try{
+    const res = await fetch(`https://raw.githubusercontent.com/${r}/main/workflow_templates/render-shorts.yml`);
+    if(!res.ok) throw new Error(res.status);
+    copy(await res.text());
+  }catch(e){
+    copy(`# ${r} 저장소의 workflow_templates/render-shorts.yml 내용을 복사해 주세요`);
+  }
+};
+$('#btnCopyPexels').onclick = ()=>copy('PEXELS_API_KEY');
+
+$('#btnCheckAll').onclick = async ()=>{
+  const out = [];
+  const r = repo();
+  try{
+    const wf = await gh(`/repos/${r}/actions/workflows`);
+    const has = (wf.workflows||[]).some(w=>w.path.includes('render-shorts.yml'));
+    out.push(has ? '✓ 렌더 워크플로 파일 있음' : '✗ 워크플로 파일 없음 (2번 단계)');
+  }catch(e){ out.push(`✗ ${e.message}`); }
+  try{
+    const pg = await gh(`/repos/${r}/pages`);
+    out.push(pg.html_url ? `✓ Pages 켜짐: ${pg.html_url}` : '✗ Pages 꺼짐');
+  }catch(e){ out.push('✗ Pages 안 켜짐 (1번 단계)'); }
+  $('#checkResult').innerHTML = out.join('<br>');
+};
+
+/* ══════════════════════════════════════════════════════════
+   렌더 요약
+   ══════════════════════════════════════════════════════════ */
+function syncRenderSummary(){
+  const n = S.cuts.length;
+  const secs = Math.round(S.cuts.reduce((a,c)=>a+estimateDur(c.narration||c.subtitle||''),0));
+  $('#sumCuts').textContent = `${n}컷 · 약 ${secs}초`;
+  $('#sumVoice').textContent = `${S.voice.includes('InJoon')?'남성 (인준)':'여성 (선히)'} · +12%`;
+  if(!$('#stepList').children.length){
+    setRenderStages([
+      {name:'렌더 요청', state:''},{name:'ffmpeg · 폰트 설치', state:''},
+      {name:'음성 · 이미지 생성', state:''},{name:'1080×1920 합성', state:''},{name:'Release 업로드', state:''}
+    ]);
+  }
+}
+
+/* ══════════════════════════════════════════════════════════
+   초기화
+   ══════════════════════════════════════════════════════════ */
+function init(){
+  load();
+  $('#topic').value = S.topic;
+  $('#hookTitle').value = S.title;
+  $$('#toneChips .chip').forEach(b=>b.setAttribute('aria-pressed', String(b.dataset.tone===S.tone)));
+  $$('#voiceChips .chip').forEach(b=>b.setAttribute('aria-pressed', String(b.dataset.voice===S.voice)));
+  renderCuts(); renderPreview(); refreshKeyState(); refreshLinks();
+  const startStep = (S.cuts.length && S.step>=2) ? Math.min(S.step,3) : 1;
+  goStep(startStep, startStep>=3 ? 2 : 1);
+
+  // 프리뷰 컷 이동
+  $('#pPrev').onclick = ()=>{ if(!S.cuts.length) return; previewIdx = (previewIdx-1+S.cuts.length)%S.cuts.length; renderPreview(); };
+  $('#pNext').onclick = ()=>{ if(!S.cuts.length) return; previewIdx = (previewIdx+1)%S.cuts.length; renderPreview(); };
+
+  // 진행 중인 렌더가 있으면 이어서 폴링
+  if(S.run && S.run.status !== 'completed' && S.run.id && S.step===3){
+    $('#phoneRendering').classList.remove('hidden');
+    pollRun(S.run.id);
+  }
+}
+init();
+</script>
+
+<script>
+/* TEMP: 결과 화면 레이아웃 확인용 */
+setTimeout(()=>{
+  S.title='월급 300만원 부업 썰';
+  S.cuts=[
+    {narration:'월급 300만원 받던 제가, 퇴근하고 두 시간만 써서 부업을 시작했어요.',subtitle:'월급 300, 퇴근 후 두 시간',visual_query:'a'},
+    {narration:'처음엔 딱 만 원 벌었습니다.',subtitle:'첫 수익은 딱 만 원',visual_query:'b'},
+    {narration:'석 달 뒤, 월급의 절반을 넘었습니다.',subtitle:'석 달 뒤, 월급의 절반',visual_query:'c'}
+  ];
+  document.querySelector('#player').src='demo/sample.mp4';
+  document.querySelector('#btnDownload').href='demo/sample.mp4';
+  document.querySelector('#btnRelease').href='https://github.com/twinspapa84/shorts-maker/releases';
+  buildCaptions();
+  goStep(4,4);
+}, 400);
+</script>
+
+</body>
+</html>
