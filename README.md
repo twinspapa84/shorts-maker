@@ -54,6 +54,8 @@ GitHub 앱 권한으로는 `.github/workflows/`에 파일을 올릴 수 없어�
 
 ## 2. 사용법 (3단계)
 
+> 스튜디오 상단 **▶ 예시 영상** 버튼을 누르면 이 도구로 만든 18초 결과물을 바로 볼 수 있습니다.
+
 1. **주제 한 줄** 입력 → 톤(유머 썰 / 정보 꿀팁 / 제품 리뷰) · 목소리(남/여) 선택 → **AI 대본 생성**
    - Gemini 키가 없으면 **직접 쓰기**로 진행할 수 있습니다.
 2. **대본 다듬기** — 컷마다 나레이션 / 화면 자막 / 비주얼 프롬프트를 수정합니다. 오른쪽 9:16 프리뷰로 바로 확인.
@@ -112,6 +114,7 @@ payload 형식:
 
 ```
 docs/index.html                     스튜디오 웹앱 (GitHub Pages)
+docs/demo/sample.mp4                예시 결과 영상 (스튜디오 “예시 영상” 버튼)
 scripts/render_shorts.py            렌더러 (edge-tts + ffmpeg + Pillow)
 workflow_templates/render-shorts.yml GitHub Actions 워크플로 (웹에서 복사)
 assets/fonts/NanumGothic-*.ttf      한국어 폰트 (OFL)
