@@ -567,10 +567,10 @@ def make_overlay(title: str, subtitle: str, index: int, total: int, dest: Path) 
         a = int(205 * (1 - t) ** 1.5)
         d.rectangle([0, y, W, y + 2], fill=(4, 6, 12, a))
     # 하단 스크림 (맨 아래는 완전히 덮어 이미지 워터마크까지 가림)
-    bot_start = 1100
+    bot_start = 1040
     for y in range(bot_start, H, 2):
         t = (y - bot_start) / (H - bot_start)
-        a = int(255 * (t ** 1.15))
+        a = int(45 + 210 * (t ** 1.2))
         if y > H - 110:
             a = min(255, a + int((255 - a) * ((y - (H - 110)) / 110)))
         d.rectangle([0, y, W, y + 2], fill=(3, 4, 9, a))
