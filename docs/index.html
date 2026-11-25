@@ -977,7 +977,7 @@ function templateScript(){
       ? {n:'가격 생각하면 지금이 제일 괜찮았어.', s:'가격 대바 괜찮아'}
       : {n:'솔직히 처음엔 나만 손해 보는 줄 알았어.', s:'나만 손해인 줄'};
   return {
-    title: (key + ' 이야기').slice(0,40),
+    title: t.slice(0,22),
     cuts: [
       {narration:`${key}, 한 번쯤 궁금했을 거야.`, subtitle:`${key} 궁금했다면`, visual_query:localVisual(0)},
       {narration:'나도 반신반의로 시작했는데, 하고 나서 생각이 바뀌었어.', subtitle:'해보고 바뀐 생각', visual_query:localVisual(1)},
