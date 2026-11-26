@@ -1404,7 +1404,7 @@ def render_cut(
     spoken = narration if narration.strip() else subtitle
     spoken_tokens = parse_tokens(spoken)
     if not spoken_tokens:
-        spoken_tokens = [(strip_marks(spoken) or " ", False)]
+        spoken_tokens = [(strip_marks(spoken) or " ", [False])]
     tts_text = tokens_plain(spoken_tokens)          # TTS 에는 ** 없는 순수 문장
     log(f"[{idx + 1}/{total}] 음성 생성 중…")
     synthesize(tts_text, voice, rate, audio_path)
