@@ -72,6 +72,7 @@
   .rail a.active{background:#fff; border-color:var(--line); box-shadow:var(--shadow); color:var(--ink)}
   .rail a.active .n{background:var(--brand); color:#fff}
   .rail a.done .n{background:#eafaf1; color:#0b7a4b}
+  .rail a.nav-off{opacity:.45; cursor:default}
   .rail .rail-foot{
     margin-top:14px; padding:13px; border-radius:12px; background:#0d1220; color:#c9d1e6;
     font-size:12px; line-height:1.55;
@@ -98,6 +99,20 @@
   .stepper .st.on{color:var(--brand)} .stepper .st.on .dot{background:var(--brand); box-shadow:0 0 0 3px var(--brand-soft)}
   .stepper .st.ok{color:#0b7a4b} .stepper .st.ok .dot{background:var(--ok)}
   .stepper .arw{color:#cdd2e0; flex:none}
+  .stepper .st.clickable{cursor:pointer; border-radius:8px}
+  .stepper .st.clickable:hover{color:var(--brand)}
+  .stepper .st.nav-off{opacity:.5; cursor:default}
+
+  /* step nav (뒤로가기) */
+  .stepnav{display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin:-2px 0 12px}
+  .backbtn{
+    display:inline-flex; align-items:center; gap:6px; height:34px; padding:0 13px;
+    border-radius:999px; border:1px solid var(--line); background:#fff; color:var(--ink-2);
+    font-size:13px; font-weight:800; cursor:pointer;
+  }
+  .backbtn:hover{border-color:#cfd4e3; background:#fbfcff}
+  .backbtn:active{background:#f0f2f8}
+  .stepnav .where{font-size:11.5px; font-weight:800; color:var(--muted)}
 
   /* inputs */
   label.f{display:block; font-size:12.5px; font-weight:800; color:var(--ink-2); margin:0 0 6px}
@@ -128,6 +143,8 @@
   .btn.primary:disabled{background:#c8cfe6; box-shadow:none; cursor:not-allowed}
   .btn.ghost{background:#fff; border-color:var(--line); color:var(--ink-2)}
   .btn.dark{background:#101626; color:#fff}
+  .btn.danger{background:#fff; border-color:#fbd5d2; color:#b42318}
+  .btn.danger:hover{background:#fff5f4}
   .btn.block{width:100%}
   .btn.sm{height:38px; padding:0 13px; font-size:13px; border-radius:10px}
   .btn:hover{filter:brightness(.985)}
@@ -260,6 +277,26 @@
     z-index:80; transition:.24s; pointer-events:none; box-shadow:var(--shadow-lg); max-width:88vw; text-align:center}
   #toast.show{opacity:1; transform:translateX(-50%) translateY(0)}
 
+  /* AI 생성 중 중단 바 */
+  .genbar{
+    display:flex; align-items:center; gap:10px; margin-top:12px; padding:10px 12px;
+    border-radius:12px; background:#f7f9ff; border:1px solid #e3e9ff; color:#3a4a86;
+    font-size:12.5px; font-weight:700;
+  }
+  .genbar .txt{flex:1; min-width:0; line-height:1.45}
+  .spinner{width:14px; height:14px; border-radius:50%; flex:none;
+    border:2px solid rgba(59,91,253,.25); border-top-color:var(--brand); animation:spin 1s linear infinite}
+
+  /* 진행 중 플로팅 중단 바 */
+  #busyBar{
+    position:fixed; left:50%; bottom:20px; transform:translateX(-50%); z-index:70;
+    display:flex; align-items:center; gap:10px; max-width:94vw;
+    background:#101626; color:#fff; padding:8px 9px 8px 17px; border-radius:999px;
+    box-shadow:var(--shadow-lg); font-size:12.5px; font-weight:800;
+  }
+  #busyBar .txt{white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  body.busy #toast{bottom:84px}
+
   .mobile-only{display:none}
   .short{display:none}
 
@@ -383,12 +420,22 @@
 
     <!-- STEP 2 -->
     <section class="card hidden" id="card-script">
+      <div class="stepnav">
+        <button type="button" class="backbtn" id="btnBack1">← 이전</button>
+        <span class="where">주제 입력으로</span>
+      </div>
       <h2>2. 대본 다듬기</h2>
       <p class="sub">나레이션은 목소리로, 자막은 화면에 크게, 비주얼 프롬프트는 배경 이미지 검색어로 쓰입니다.</p>
       <div class="note" id="scriptLog" style="display:none"></div>
 
       <label class="f" for="hookTitle">영상 훅 제목 <span style="color:var(--muted);font-weight:700">(상단 노란 배너)</span></label>
       <input type="text" id="hookTitle" maxlength="40" placeholder="예) 월급 300만원 부업 썰" />
+
+      <div class="genbar hidden" id="genBar">
+        <span class="spinner"></span>
+        <span class="txt" id="genBarText">AI가 대본을 쓰는 중…</span>
+        <button type="button" class="btn danger sm" id="btnStopGen">⏹ 중단</button>
+      </div>
 
       <div class="cuts" id="cuts" style="margin-top:16px"></div>
 
@@ -401,6 +448,10 @@
 
     <!-- STEP 3 -->
     <section class="card hidden" id="card-render">
+      <div class="stepnav">
+        <button type="button" class="backbtn" id="btnBack2">← 대본으로</button>
+        <span class="where">대본은 그대로 남아 있어요</span>
+      </div>
       <h2>3. 영상 렌더링</h2>
       <p class="sub">GitHub Actions에서 실제 MP4를 만듭니다. 보통 2~5분 걸리고, 창을 닫아도 계속 진행됩니다.</p>
 
@@ -426,13 +477,17 @@
 
       <div class="row" style="margin-top:16px">
         <button class="btn primary" id="btnRender" style="flex:2 1 240px">🎬 렌더링 시작</button>
-        <button class="btn ghost" id="btnBack2" style="flex:1 1 140px">← 대본 수정</button>
+        <button class="btn danger hidden" id="btnStopRender" style="flex:1 1 160px">⏹ 렌더링 중단</button>
       </div>
       <div id="runLinks" style="margin-top:12px"></div>
     </section>
 
     <!-- STEP 4 -->
     <section class="card hidden" id="card-result">
+      <div class="stepnav">
+        <button type="button" class="backbtn" id="btnBack3">← 대본으로</button>
+        <span class="where">문장을 고쳐 다시 렌더할 수 있어요</span>
+      </div>
       <h2>4. 완성 🎬</h2>
       <p class="sub">영상 확인 → 캡션 복사 → 그대로 업로드하세요.</p>
 
@@ -448,7 +503,7 @@
       <div class="cap-grid" id="captionGrid"></div>
 
       <div class="row" style="margin-top:20px">
-        <button class="btn dark" id="btnNew" style="flex:2 1 240px">+ 새 영상 만들기</button>
+        <button class="btn dark" id="btnNew" style="flex:2 1 240px">+ 새 쇼츠 만들기</button>
         <button class="btn ghost" id="btnAgain" style="flex:1 1 160px">같은 대본 다시 렌더</button>
       </div>
     </section>
@@ -575,6 +630,7 @@
   </div>
 </div>
 
+<div class="hidden" id="busyBar"><span class="txt" id="busyText">작업 중…</span><button type="button" class="btn danger sm" id="busyStop">⏹ 중단</button></div>
 <div id="toast"></div>
 
 <script>
@@ -610,6 +666,32 @@ const $$ = (s,r=document)=>[...r.querySelectorAll(s)];
 const esc = s => String(s??'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const sleep = ms => new Promise(r=>setTimeout(r,ms));
 
+/* ── 중단(취소) 지원 ─────────────────────────────────────
+   대본 생성 중에 ⏹ 중단을 누르면 진행 중인 fetch와 대기(countdown 포함)를
+   모두 끊고, 원래 단계로 돌아갑니다. 기존 대본·주제는 건드리지 않습니다. */
+class Cancelled extends Error{
+  constructor(){ super('CANCELLED'); this.name = 'Cancelled'; }
+}
+let gen = null;   // {ctrl, cancelled, navigated, fromStep, fromStage}
+
+function isCancelled(e){
+  return !!(e && (e.name === 'Cancelled' || (e.name === 'AbortError' && gen && gen.cancelled)));
+}
+function assertGen(){ if(gen && gen.cancelled) throw new Cancelled(); }
+
+/* 생성 중에는 취소 버튼에 반응하는 대기 (* 일반 sleep과 달리 abort되면 즉시 종료) */
+function wait(ms){
+  assertGen();
+  const g = gen;
+  if(!g) return new Promise(r=>setTimeout(r,ms));
+  return new Promise((res, rej)=>{
+    if(g.ctrl.signal.aborted) return rej(new Cancelled());
+    const onAbort = ()=>{ clearTimeout(timer); rej(new Cancelled()); };
+    const timer = setTimeout(()=>{ g.ctrl.signal.removeEventListener('abort', onAbort); res(); }, ms);
+    g.ctrl.signal.addEventListener('abort', onAbort, {once:true});
+  });
+}
+
 function toast(msg, ms=2200){
   const t = $('#toast'); t.textContent = msg; t.classList.add('show');
   clearTimeout(t._t); t._t = setTimeout(()=>t.classList.remove('show'), ms);
@@ -629,8 +711,47 @@ async function copy(text){
    ══════════════════════════════════════════════════════════ */
 const STAGES = ['대본 만들기','스크립트 생성 중','영상 렌더링 중','완성'];
 
-function goStep(n, stage){
-  S.step = n; S.stage = stage ?? Math.min(n,3);
+/* ── 뒤로가기(브라우저·아이폰 스와이프) ───────────────────
+   단계마다 history 엔트리를 쌓아 두면, 2·3·4단계에서 스와이프해도
+   앱이 꺼지지 않고 이전 단계로 돌아옵니다. */
+let pushedStep = null;
+
+function pushStepHistory(n){
+  try{
+    if(history.state && history.state.shortsStep === n){ pushedStep = n; return; }
+    history.pushState({shortsStep:n, stage:S.stage}, '');
+    pushedStep = n;
+  }catch(e){}
+}
+
+function stageForStep(n){ return n===3 ? 3 : (n>=4 ? 4 : 1); }
+
+function canGoStep(n){
+  if(n===1) return true;
+  if(n===2) return S.cuts.length>0 || S.step===2;
+  if(n===3) return S.cuts.length>0;
+  if(n===4) return S.step===4 || !!($('#player') && $('#player').src) || !!(S.run && S.run.status==='completed');
+  return false;
+}
+
+function updateStepNav(){
+  const busyGen = !!(gen && !gen.cancelled);
+  $$('.stepper .st').forEach(el=>{
+    const k = +el.dataset.st;
+    const ok = canGoStep(k) && !busyGen;
+    el.classList.toggle('clickable', ok);
+    el.classList.toggle('nav-off', !ok);
+    el.title = ok ? `${STAGES[k-1]} 단계로 이동` : '이전 단계를 먼저 채워주세요';
+  });
+  $$('.rail a').forEach(a=>{
+    const k = +a.dataset.rail;
+    a.classList.toggle('nav-off', !canGoStep(k) || busyGen);
+  });
+}
+
+function goStep(n, stage, opts={}){
+  const prev = S.step;
+  S.step = n; S.stage = stage ?? stageForStep(n);
   if(n===3 && previewIdx>0){ previewIdx = 0; }
   ['#card-topic','#card-script','#card-render','#card-result'].forEach((sel,i)=>{
     $(sel).classList.toggle('hidden', i+1 !== n);
@@ -645,11 +766,30 @@ function goStep(n, stage){
     a.classList.toggle('active', k === n);
     a.classList.toggle('done', k < n);
   });
+  if(n===2){   // 대본 화면으로 돌아올 때 입력값·컷 유지
+    if($('#hookTitle').value !== S.title) $('#hookTitle').value = S.title || '';
+    if(document.activeElement !== $('#hookTitle') && $('#cuts').children.length !== S.cuts.length) renderCuts();
+  }
   if(n===3) syncRenderSummary();
   renderPreview();
+  updateStepNav();
+  updateBusyBar();
+  if(!opts.noHistory && (!history.state || history.state.shortsStep !== n)) pushStepHistory(n);
   window.scrollTo({top:0, behavior:'smooth'});
   save();
 }
+
+/* 아이폰 사파리 스와이프 / 브라우저 뒤로가기 = 앱 종료 대신 이전 단계 */
+window.addEventListener('popstate', e=>{
+  if(window.__navApplying) return;
+  const st = e.state;
+  if(gen && !gen.cancelled){ gen.navigated = true; cancelGen({quiet:true}); }
+  const n = (st && typeof st.shortsStep === 'number') ? st.shortsStep : 1;
+  const stage = (st && st.stage) || stageForStep(n);
+  window.__navApplying = true;
+  try{ goStep(n, stage, {noHistory:true}); } finally { window.__navApplying = false; }
+  toast('이전 단계로 돌아왔어요', 1400);
+});
 
 /* ══════════════════════════════════════════════════════════
    프리뷰
@@ -736,7 +876,7 @@ $('#btnToRender').onclick = ()=>{
   if(!S.cuts.length){ toast('컷이 없습니다'); return; }
   if(!S.cuts.some(c=>c.narration.trim()||c.subtitle.trim())){ toast('나레이션을 채워주세요'); return; }
   S.title = S.title || $('#hookTitle').value || '쇼츠';
-  goStep(3, 2);
+  goStep(3, 3);
 };
 
 /* ══════════════════════════════════════════════════════════
@@ -776,6 +916,7 @@ async function gemini(prompt, {json=true, logEl=null}={}){
   let lastErr;
   for(const model of GEMINI_MODELS){
     for(let attempt=0; attempt<2; attempt++){
+      assertGen();
       try{
         if(logEl) logEl.textContent = `Gemini ${model} 호출 중…`;
         const body = {
@@ -784,7 +925,8 @@ async function gemini(prompt, {json=true, logEl=null}={}){
         };
         if(json) body.generationConfig.responseMimeType = 'application/json';
         const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`,{
-          method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)
+          method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body),
+          signal: gen ? gen.ctrl.signal : undefined
         });
         if(!r.ok){
           const txt = await r.text();
@@ -798,9 +940,10 @@ async function gemini(prompt, {json=true, logEl=null}={}){
         if(!text) throw new Error('빈 응답');
         return json ? extractJson(text) : text;
       }catch(e){
+        if(isCancelled(e)) throw new Cancelled();
         lastErr = e;
         if(logEl) logEl.textContent = `${model} 실패 → 다음 모델로 (${e.message.slice(0,60)})`;
-        await sleep(900 + attempt*900);
+        await wait(900 + attempt*900);
       }
     }
   }
@@ -814,17 +957,21 @@ async function gemini(prompt, {json=true, logEl=null}={}){
 const safeJson = t => { try{ return JSON.parse(t); }catch(e){ return null; } };
 
 async function countdown(sec, say, label){
-  for(let s=Math.ceil(sec); s>0; s--){ if(say) say(`${label} ${s}초`); await sleep(1000); }
+  for(let s=Math.ceil(sec); s>0; s--){ assertGen(); if(say) say(`${label} ${s}초`); await wait(1000); }
 }
 
 async function pollinations(messages, {json=true, say=null, maxWaits=1, timeoutMs=75000}={}){
   let waits = 0, netTry = 0, lastErr;
   for(;;){
+    assertGen();
     let r, txt = '';
     try{
       if(say) say(netTry || waits ? '무료 AI 다시 요청 중…' : '무료 AI가 쓰는 중… (10~30초)');
       const ctrl = new AbortController();
       const timer = setTimeout(()=>ctrl.abort(), timeoutMs);
+      const gsig = gen ? gen.ctrl.signal : null;
+      const onG = ()=>{ try{ ctrl.abort(); }catch(_){} };
+      if(gsig) gsig.addEventListener('abort', onG, {once:true});
       try{
         r = await fetch(POLL_URL, {
           method:'POST', headers:{'Content-Type':'application/json'},
@@ -832,11 +979,12 @@ async function pollinations(messages, {json=true, say=null, maxWaits=1, timeoutM
           signal: ctrl.signal
         });
         txt = await r.text();
-      }finally{ clearTimeout(timer); }
+      }finally{ clearTimeout(timer); if(gsig) gsig.removeEventListener('abort', onG); }
     }catch(e){
+      if(gen && gen.cancelled) throw new Cancelled();
       lastErr = e;
       if(++netTry >= 2) throw new Error(`무료 AI 연결 실패 (${e.name==='AbortError'?'시간 초과':'네트워크'})`);
-      await sleep(1500); continue;
+      await wait(1500); continue;
     }
     const j = safeJson(txt);
     const code = String(j?.error?.code || '');
@@ -869,6 +1017,7 @@ async function aiJson({geminiPrompt, freePrompt, say=null, geminiLog=null}){
       const data = await gemini(geminiPrompt, {json:true, logEl: geminiLog});
       return {data, source:'gemini'};
     }catch(e){
+      if(isCancelled(e)) throw new Cancelled();
       if(say) say('Gemini 응답이 없어 무료 AI로 넘어갑니다…');
     }
   }
@@ -998,10 +1147,12 @@ async function makeScript(say){
       if(script.cuts.length >= 3) return {script, source:'gemini'};
       throw new Error('Gemini 대본이 짧습니다');
     }catch(e){
+      if(isCancelled(e)) throw new Cancelled();
       if(say) say('Gemini 응답이 없어 무료 AI로 넘어갑니다…');
     }
   }
   for(const n of [5,4]){
+    assertGen();
     try{
       const data = await pollinations([
         {role:'system', content: POLL_SYS},
@@ -1011,6 +1162,7 @@ async function makeScript(say){
       if(script.cuts.length >= 3) return {script, source:'free'};
       throw new Error('SHORT_SCRIPT');
     }catch(e){
+      if(isCancelled(e)) throw new Cancelled();
       const msg = String(e.message||'');
       if(msg==='OUTPUT_TOO_LONG' || msg==='SHORT_SCRIPT') continue;   // 컷 수를 줄여 재시도
       if(say) say(`무료 AI가 지금은 막혔어요 (${msg.slice(0,40)}) — 기본 틀로 만들게요`);
@@ -1021,16 +1173,25 @@ async function makeScript(say){
 }
 
 $('#btnGenerate').onclick = async ()=>{
+  if(gen && !gen.cancelled){ toast('이미 대본을 만들고 있어요'); return; }
   const topic = $('#topic').value.trim();
   if(!topic){ toast('주제를 먼저 적어주세요'); $('#topic').focus(); return; }
   S.topic = topic;
+
+  const fromStep = (S.step===1) ? 1 : 2;                 // 사용자가 시작한 단계로 되돌릴 곳
+  const fromStage = S.stage || stageForStep(fromStep);
+  gen = {ctrl:new AbortController(), cancelled:false, navigated:false, fromStep, fromStage};
+
   const log = $('#genLog'); log.className='note'; log.style.display='block'; log.textContent='대본 생성 중…';
   const slog = $('#scriptLog'); slog.className='note'; slog.style.display='block'; slog.textContent='대본 생성 중…';
-  const say = t => { log.textContent = t; slog.textContent = t; };
+  const say = t => { log.textContent = t; slog.textContent = t; const gt=$('#genBarText'); if(gt) gt.textContent = t; };
   $('#btnGenerate').disabled = true;
+  $('#btnRegen').disabled = true;
   goStep(2, 2);
+  showGenBar(true, 'AI가 대본을 쓰는 중…');
   try{
     const {script, source} = await makeScript(say);
+    if(gen && gen.cancelled) throw new Cancelled();
     if(!script.cuts.length) throw new Error('대본이 비어 있습니다');
     S.title = script.title;
     S.cuts = script.cuts;
@@ -1048,6 +1209,14 @@ $('#btnGenerate').onclick = async ()=>{
     setTimeout(()=>{ log.style.display='none'; }, 6000);
     setTimeout(()=>{ slog.style.display='none'; }, 7000);
   }catch(e){
+    if(isCancelled(e)){
+      log.className='note'; log.style.display='none'; log.textContent='';
+      slog.className='note'; slog.style.display='none'; slog.textContent='';
+      const navved = !!(gen && gen.navigated);
+      if(!navved) goStep(fromStep, fromStage);          // 시작한 단계로 (기존 대본·주제 유지)
+      toast('대본 생성을 중단했어요', 2200);
+      return;
+    }
     log.className='note warn';
     slog.className='note warn';
     if(e.message==='NO_KEY'){
@@ -1061,6 +1230,11 @@ $('#btnGenerate').onclick = async ()=>{
     if(S.cuts.length) setTimeout(()=>{ slog.style.display='none'; }, 8000);
   }finally{
     $('#btnGenerate').disabled = false;
+    $('#btnRegen').disabled = false;
+    showGenBar(false);
+    gen = null;
+    updateStepNav();
+    updateBusyBar();
   }
 };
 
@@ -1082,6 +1256,79 @@ function startManual(){
 }
 
 $('#btnRegen').onclick = ()=>{ $('#btnGenerate').click(); };
+
+/* ══════════════════════════════════════════════════════════
+   중단 버튼 · 단계 이동(뒤로가기)
+   ══════════════════════════════════════════════════════════ */
+function showGenBar(on, text){
+  const bar = $('#genBar');
+  if(!bar) return;
+  bar.classList.toggle('hidden', !on);
+  if(text){ const t = $('#genBarText'); if(t) t.textContent = text; }
+  updateBusyBar();
+}
+
+function cancelGen(opts={}){
+  if(!gen || gen.cancelled) return;
+  gen.cancelled = true;
+  try{ gen.ctrl.abort(); }catch(e){}
+  showGenBar(false);
+  if(!opts.quiet) toast('중단하는 중…', 900);
+  updateBusyBar();
+}
+
+/* 어느 단계에 있든 진행 중인 작업을 멈출 수 있는 플로팅 바 */
+function updateBusyBar(){
+  const bar = $('#busyBar');
+  if(!bar) return;
+  const generating = !!(gen && !gen.cancelled);
+  const rendering = !!renderActive;
+  let show = false, text = '', mode = '';
+  if(generating){
+    show = S.step !== 2;                       // 2단계는 카드 안 중단 버튼을 쓴다
+    text = 'AI가 대본을 쓰는 중…';
+    mode = 'gen';
+  }else if(rendering){
+    show = S.step !== 3;                       // 3단계는 카드 안 중단 버튼을 쓴다
+    const pct = ($('#renderPct').textContent || '').replace('%','').trim();
+    text = (pct && pct!=='0') ? `영상 렌더링 중 · ${pct}%` : '영상 렌더링 중';
+    mode = 'render';
+  }
+  bar.classList.toggle('hidden', !show);
+  document.body.classList.toggle('busy', show);
+  if(show){
+    $('#busyText').textContent = text;
+    $('#busyStop').textContent = mode==='gen' ? '⏹ 중단' : '⏹ 렌더링 중단';
+    $('#busyStop').dataset.mode = mode;
+  }
+}
+
+$('#btnStopGen').onclick = ()=> cancelGen();
+$('#busyStop').onclick = ()=>{
+  if($('#busyStop').dataset.mode === 'gen') cancelGen();
+  else stopRender();
+};
+
+function navigateBack(n){
+  if(gen && !gen.cancelled){ gen.navigated = true; cancelGen({quiet:true}); }
+  goStep(n, stageForStep(n));
+}
+$('#btnBack1').onclick = ()=> navigateBack(1);            // 2단계 → 주제
+$('#btnBack2').onclick = ()=> navigateBack(2);            // 3단계 → 대본(유지)
+$('#btnBack3').onclick = ()=> navigateBack(2);            // 4단계 → 대본 수정 후 재렌더
+$('#btnNew').onclick = ()=>{ navigateBack(1); toast('주제를 새로 적어주세요', 1800); };
+
+/* 단계 표시·좌측 레일 클릭으로도 이동 */
+function gotoFromNav(k){
+  if(gen && !gen.cancelled){ toast('대본을 만드는 중이에요 · 먼저 ⏹ 중단을 눌러주세요'); return; }
+  if(!canGoStep(k)){ toast('이전 단계를 먼저 채워주세요'); return; }
+  if(k === S.step) return;
+  goStep(k, stageForStep(k));
+}
+$$('.stepper .st').forEach(el=>{ el.onclick = ()=> gotoFromNav(+el.dataset.st); });
+$$('.rail a').forEach(a=>{
+  a.addEventListener('click', e=>{ e.preventDefault(); gotoFromNav(+a.dataset.rail); });
+});
 
 /* ══════════════════════════════════════════════════════════
    GitHub API
@@ -1121,6 +1368,54 @@ function payload(){
    렌더
    ══════════════════════════════════════════════════════════ */
 let pollTimer = null;
+let renderToken = 0;        // 중단할 때마다 올려 진행 중인 폴링 루프를 무효화
+let renderActive = false;   // 지금 이 화면이 렌더를 따라가는 중인가
+let pendingDispatchAt = 0;  // 중단 시 런을 못 찾았을 때 되짚어 취소할 기준 시각
+
+function setRenderingUI(on){
+  renderActive = on;
+  const b = $('#btnRender');
+  b.disabled = on;
+  b.textContent = on ? '🎬 렌더링 중…' : '🎬 렌더링 시작';
+  $('#btnStopRender').classList.toggle('hidden', !on);
+  updateBusyBar();
+}
+
+/* 렌더 중단: 폴링 즉시 중지 → (가능하면) GitHub 런 취소 → 2단계로 복귀 */
+async function cancelLatestRunSince(t0){
+  try{
+    const d = await gh(`/repos/${repo()}/actions/runs?event=workflow_dispatch&per_page=5`);
+    const cand = (d.workflow_runs||[]).filter(r=>new Date(r.created_at).getTime()/1000 >= t0-30);
+    if(cand[0]) await gh(`/repos/${repo()}/actions/runs/${cand[0].id}/cancel`, {method:'POST'});
+  }catch(e){}
+}
+
+function stopRender(opts={}){
+  const id = S.run && S.run.id ? S.run.id : null;
+  const was = renderActive;
+  renderToken++;
+  clearTimeout(pollTimer); pollTimer = null;
+  setRenderingUI(false);
+  $('#phoneRendering').classList.add('hidden');
+  setPct(0,'');
+  if(was) setRenderStages([{name:'렌더링 중단됨 — 대본은 그대로 있어요', state:''}]);
+  if(S.run){ S.run = Object.assign({}, S.run, {stopped:true}); save(); }
+  $('#runLinks').innerHTML = '';
+  if(!opts.keepStep) goStep(2, 1);
+  if(!opts.quiet){
+    toast('렌더링을 중단했어요', 2600);
+    if(!opts.keepStep){
+      const slog = $('#scriptLog');
+      slog.className = 'note'; slog.style.display = 'block';
+      slog.textContent = '렌더링을 중단했어요. 대본은 그대로 남아 있으니 문장을 고쳐 다시 렌더링하면 됩니다.';
+      setTimeout(()=>{ slog.style.display='none'; }, 9000);
+    }
+  }
+  // GitHub Actions 런 취소 (베스트에포트 · 실패해도 무시)
+  if(id) gh(`/repos/${repo()}/actions/runs/${id}/cancel`, {method:'POST'}).catch(()=>{});
+  else if(pendingDispatchAt) cancelLatestRunSince(pendingDispatchAt);
+  pendingDispatchAt = 0;
+}
 
 function setRenderStages(list){
   $('#stepList').innerHTML = list.map(s=>{
@@ -1135,17 +1430,24 @@ function setPct(p, label){
   if(label) $('#renderLbl').textContent = label;
   const mp = $('#mobileProgress');
   if(mp){ mp.style.display = (v>0 && v<101) ? 'block' : 'none'; $('#mpPct').textContent = `${v}%`; $('#mpBar').style.width = `${v}%`; if(label) $('#mpLabel').textContent = label; }
+  updateBusyBar();
 }
 
 $('#btnRender').onclick = startRender;
-$('#btnAgain').onclick = ()=>{ goStep(3,2); startRender(); };
+$('#btnAgain').onclick = ()=>{ goStep(3,3); startRender(); };
+$('#btnStopRender').onclick = ()=> stopRender();
 
 async function startRender(){
+  if(gen && !gen.cancelled){ toast('대본을 만드는 중이에요'); return; }
+  if(renderActive){ toast('이미 렌더링 중이에요'); return; }
   if(!S.settings.pat.trim()){ openSettings(); toast('GitHub 토큰을 먼저 넣어주세요'); return; }
   const p = payload();
-  if(!p.cuts.length){ toast('컷이 비어 있습니다'); goStep(2); return; }
+  if(!p.cuts.length){ toast('컷이 비어 있습니다'); goStep(2,1); return; }
 
-  $('#btnRender').disabled = true;
+  const token = ++renderToken;
+  S.run = null; save();
+  pendingDispatchAt = 0;
+  setRenderingUI(true);
   $('#phoneRendering').classList.remove('hidden');
   setPct(2,'요청 보내는 중');
   setRenderStages([{name:'GitHub에 렌더 요청', state:'run'},{name:'워크플로 시작 대기', state:''}]);
@@ -1154,12 +1456,15 @@ async function startRender(){
   try{
     const before = await gh(`/repos/${repo()}/actions/runs?event=workflow_dispatch&per_page=8`)
       .then(d=>new Set((d.workflow_runs||[]).map(r=>r.id))).catch(()=>new Set());
+    if(token !== renderToken) return;
     const t0 = Date.now()/1000;
 
+    pendingDispatchAt = t0;
     await gh(`/repos/${repo()}/actions/workflows/render-shorts.yml/dispatches`, {
       method:'POST',
       body: JSON.stringify({ ref:'main', inputs:{ payload_json: JSON.stringify(p) } })
     });
+    if(token !== renderToken) return;
 
     setRenderStages([{name:'GitHub에 렌더 요청', state:'ok'},{name:'워크플로 시작 대기', state:'run'}]);
     setPct(5,'워크플로 시작 대기');
@@ -1167,17 +1472,22 @@ async function startRender(){
     let run = null;
     for(let i=0;i<40 && !run;i++){
       await sleep(i<8?2500:5000);
+      if(token !== renderToken) return;
       const d = await gh(`/repos/${repo()}/actions/runs?event=workflow_dispatch&per_page=10`);
+      if(token !== renderToken) return;
       const cand = (d.workflow_runs||[]).filter(r=>!before.has(r.id) && new Date(r.created_at).getTime()/1000 >= t0-180);
       if(cand.length) run = cand[0];
     }
     if(!run) throw new Error('실행을 찾지 못했습니다. GitHub Actions 탭을 확인해 주세요.');
 
     S.run = {id:run.id, url:run.html_url, number:run.run_number, status:run.status, conclusion:null};
+    pendingDispatchAt = 0;
+    save();
     $('#phoneRendering').classList.remove('hidden');
-    pollRun(run.id);
+    pollRun(run.id, token);
   }catch(e){
-    $('#btnRender').disabled = false;
+    if(token !== renderToken) return;            // 사용자가 중단한 경우
+    setRenderingUI(false);
     $('#phoneRendering').classList.add('hidden');
     setPct(0,'');
     if(e.status === 404){
@@ -1197,12 +1507,15 @@ async function startRender(){
   }
 }
 
-async function pollRun(id){
+async function pollRun(id, token = renderToken){
   clearTimeout(pollTimer);
+  if(token !== renderToken) return;
   try{
     const run = await gh(`/repos/${repo()}/actions/runs/${id}`);
+    if(token !== renderToken) return;                       // 중단됨 → 이후 갱신·재예약 안 함
     S.run = {id, url:run.html_url, number:run.run_number, status:run.status, conclusion:run.conclusion};
     const jobs = await gh(`/repos/${repo()}/actions/runs/${id}/jobs`).catch(()=>({jobs:[]}));
+    if(token !== renderToken) return;
     const job = (jobs.jobs||[])[0];
 
     if(job){
@@ -1226,17 +1539,22 @@ async function pollRun(id){
       if(run.conclusion === 'success'){ await onRenderDone(run); }
       else {
         clearTimeout(pollTimer);
-        $('#btnRender').disabled = false;
+        setRenderingUI(false);
         $('#phoneRendering').classList.add('hidden');
         setPct(0,'');
-        setRenderStages([{name:`렌더 실패 (${run.conclusion})`, state:'err'}]);
-        $('#runLinks').innerHTML = `<div class="note warn">렌더가 실패했습니다. 로그를 확인해 주세요.<br><a href="${run.html_url}" target="_blank" rel="noopener">실패 로그 보기 →</a><br>흔한 원인: 워크플로 파일 오타 · 저장소 Actions 비활성 · 네트워크 일시 오류(다시 시도)</div>`;
+        const cancelled = run.conclusion === 'cancelled';
+        setRenderStages([{name: cancelled ? '렌더가 취소됐어요' : `렌더 실패 (${run.conclusion})`, state: cancelled ? '' : 'err'}]);
+        $('#runLinks').innerHTML = cancelled
+          ? `<div class="note">GitHub에서 이 렌더가 취소됐어요. 대본을 고쳐 다시 렌더링하면 됩니다.</div>`
+          : `<div class="note warn">렌더가 실패했습니다. 로그를 확인해 주세요.<br><a href="${run.html_url}" target="_blank" rel="noopener">실패 로그 보기 →</a><br>흔한 원인: 워크플로 파일 오타 · 저장소 Actions 비활성 · 네트워크 일시 오류(다시 시도)</div>`;
       }
       return;
     }
-    pollTimer = setTimeout(()=>pollRun(id), 5000);
+    if(token !== renderToken) return;
+    pollTimer = setTimeout(()=>pollRun(id, token), 5000);
   }catch(e){
-    pollTimer = setTimeout(()=>pollRun(id), 8000);
+    if(token !== renderToken) return;
+    pollTimer = setTimeout(()=>pollRun(id, token), 8000);
   }
 }
 
@@ -1265,7 +1583,7 @@ async function onRenderDone(run){
 
   await buildCaptions();
   $('#phoneRendering').classList.add('hidden');
-  $('#btnRender').disabled = false;
+  setRenderingUI(false);
   goStep(4, 4);
   toast('영상 완성! 바로 다운로드할 수 있어요', 3500);
 }
@@ -1459,14 +1777,16 @@ function init(){
   $$('#voiceChips .chip').forEach(b=>b.setAttribute('aria-pressed', String(b.dataset.voice===S.voice)));
   renderCuts(); renderPreview(); refreshKeyState(); refreshLinks();
   const startStep = (S.cuts.length && S.step>=2) ? Math.min(S.step,3) : 1;
-  goStep(startStep, startStep>=3 ? 2 : 1);
+  try{ history.replaceState({shortsStep:startStep, stage:stageForStep(startStep)}, ''); }catch(e){}
+  goStep(startStep, stageForStep(startStep));
 
   // 프리뷰 컷 이동
   $('#pPrev').onclick = ()=>{ if(!S.cuts.length) return; previewIdx = (previewIdx-1+S.cuts.length)%S.cuts.length; renderPreview(); };
   $('#pNext').onclick = ()=>{ if(!S.cuts.length) return; previewIdx = (previewIdx+1)%S.cuts.length; renderPreview(); };
 
-  // 진행 중인 렌더가 있으면 이어서 폴링
-  if(S.run && S.run.status !== 'completed' && S.run.id && S.step===3){
+  // 진행 중인 렌더가 있으면 이어서 폴링 (사용자가 중단한 건은 제외)
+  if(S.run && S.run.status !== 'completed' && !S.run.stopped && S.run.id && S.step===3){
+    setRenderingUI(true);
     $('#phoneRendering').classList.remove('hidden');
     pollRun(S.run.id);
   }
