@@ -5,7 +5,8 @@
 - 화면(스튜디오)은 **GitHub Pages**에서 무료로 뜹니다.
 - 영상 렌더링은 **GitHub Actions 무료 러너**에서 `ffmpeg`로 돌아갑니다.
 - 목소리는 **edge-tts**(마이크로소프트 신경망 음성), 무료입니다.
-- 배경은 **Pexels**(무료 키, 선택) → **Pollinations.ai**(무료 AI 이미지) → **그라데이션 카드** 순서로 자동 대체되어 **절대 실패하지 않습니다**.
+- 배경은 **Pexels**(무료 키, 선택) → **Pollinations.ai**(무료 AI 이미지 flux→turbo) → **Openverse 스톡 사진** → **Picsum** → **Wikimedia Commons** → **그라데이션 카드** 순서로 자동 대체되어 **절대 실패하지 않습니다**.
+- 배경음악과 컷 전환 효과음이 기본으로 깔립니다(직접 만든 로열티 프리 소리, `assets/audio/`).
 
 ---
 
@@ -54,7 +55,7 @@ GitHub 앱 권한으로는 `.github/workflows/`에 파일을 올릴 수 없어�
 
 ## 2. 사용법 (3단계)
 
-> 스튜디오 상단 **▶ 예시 영상** 버튼을 누르면 이 도구로 만든 18초 결과물을 바로 볼 수 있습니다.
+> 스튜디오 상단 **▶ 예시 영상** 버튼을 누르면 이 도구로 만든 24초 결과물을 바로 볼 수 있습니다.
 
 1. **주제 한 줄** 입력 → 톤(유머 썰 / 정보 꿀팁 / 제품 리뷰) · 목소리(남/여) 선택 → **AI 대본 생성**
    - Gemini 키가 없으면 **직접 쓰기**로 진행할 수 있습니다.
@@ -76,12 +77,14 @@ GitHub 앱 권한으로는 `.github/workflows/`에 파일을 올릴 수 없어�
 |---|---|
 | 해상도 | 1080×1920 (9:16) |
 | 프레임 | 30fps, H.264 + AAC |
-| 길이 | 컷 5~6개, 약 30~45초 |
-| 자막 | 나눔고딕 Bold, 검정 외곽선 + 그림자 |
-| 훅 제목 | 상단 노란 형광펜 배너 |
-| 모션 | 컷마다 Ken Burns 줌/팬 (정지 화면 없음) |
-| 전환 | 컷 경계 페이드 인/아웃 + 오디오 페이드 |
-| 안전 영역 | 릴스·쇼츠 UI를 피한 상·하단 마진 |
+| 길이 | 컷 5~6개, 약 25~32초 (한 컷 3~5초) |
+| 대본 | 컷당 나레이션 15~32자 짧은 입말 (첫 컷 후킹 · 마지막 컷 여운/댓글 유도) |
+| 자막 | 나레이션을 10~15자 호흡 단위로 쪼개 말 속도에 맞춰 순차 표시. 굵은 흰 글씨 + 검정 외곽선 + 반투명 다크 필 |
+| 훅 제목 | 상단 노란 형광펜 배너 (컷 내내 고정) |
+| 모션 | 컷마다 다른 Ken Burns 줌/팬 (정지 화면 없음) |
+| 전환 | 암전 없는 하드컷 (첫 컷 0.15초 인트로 ·마지막 컷 0.2초 아웃트로만) |
+| 오디오 | 나레이션 0dB + BGM -20dB 루프 + 컷 전환 "스윽" (전체 -14 LUFS) |
+| 안전 영역 | 릴스·쇼츠 UI를 피한 상·하단 마진 (자막 하단 1450px) |
 
 ---
 
@@ -97,14 +100,17 @@ payload 형식:
 
 ```json
 {
-  "title": "월급 300만원 부업 썰",
+  "title": "월 30만원 부업, 3주 만에 바뀐 것",
   "voice": "ko-KR-InJoonNeural",
   "rate": "+12%",
+  "bgm": true,
   "cuts": [
-    {"narration": "말할 문장", "subtitle": "화면 자막", "visual_query": "english visual prompt"}
+    {"narration": "15~32자 입말 한 문장", "subtitle": "10~18자 입말", "visual_query": "english visual prompt 8~14 words"}
   ]
 }
 ```
+
+- `"bgm": false` 를 넣으면 배경음악·효과음 없이 나레이션만 렌더합니다(`--no-bgm` 옵션과 같음).
 
 `output/`에 `shorts_final.mp4`, `thumbnail.jpg`, `manifest.json`이 생성됩니다.
 
@@ -116,6 +122,9 @@ payload 형식:
 docs/index.html                     스튜디오 웹앱 (GitHub Pages)
 docs/demo/sample.mp4                예시 결과 영상 (스튜디오 “예시 영상” 버튼)
 scripts/render_shorts.py            렌더러 (edge-tts + ffmpeg + Pillow)
+scripts/make_audio_assets.py        BGM·효과음 생성기 (assets/audio 를 다시 만들 때)
+assets/audio/bgm_lofi.wav           30초 로파이 루프 BGM (직접 생성)
+assets/audio/sfx_whoosh.wav         컷 전환 효과음
 workflow_templates/render-shorts.yml GitHub Actions 워크플로 (웹에서 복사)
 assets/fonts/NanumGothic-*.ttf      한국어 폰트 (OFL)
 samples/payload_sample.json         로컬 테스트용 예시
@@ -131,7 +140,7 @@ samples/payload_sample.json         로컬 테스트용 예시
 | `토큰 권한 부족 (403)` | 토큰에 **Actions: Read and write** 권한이 없습니다. 토큰을 다시 만드세요. |
 | 렌더가 실패로 끝남 | Actions 로그 확인. 대부분 네트워크 일시 오류 → 다시 렌더. |
 | AI 대본 생성 실패(503) | Gemini 무료 한도/혼잡. 자동으로 `2.5 → 2.0 → 1.5` 모델로 재시도하고, 그래도 안 되면 직접 쓰기. |
-| 배경이 어둡기만 함 | Pexels 키가 없고 Pollinations가 혼잡한 경우입니다. Pexels 무료 키를 넣으면 해결됩니다. |
+| 배경이 어둡기만 함 | Pexels 키가 없고 이미지 서비스가 모두 혼잡한 경우입니다. Pexels 무료 키를 넣으면 해결됩니다. |
 | 자막이 □로 보임 | `assets/fonts/NanumGothic-Bold.ttf`가 있는지 확인. 없으면 워크플로가 `fonts-noto-cjk`를 설치합니다. |
 
 ---

@@ -1,11 +1,15 @@
 {
-  "title": "월급 300만원 부업 썰",
+  "title": "월 30만원 부업, 3주 만에 바뀐 것",
   "voice": "ko-KR-InJoonNeural",
   "rate": "+12%",
   "tone": "유머 썰",
+  "bgm": true,
   "cuts": [
-    {"narration": "월급 300만원 받던 제가, 퇴근하고 두 시간만 써서 부업을 시작했어요.", "subtitle": "월급 300, 퇴근 후 두 시간", "visual_query": "korean office worker leaving office at night, city lights, cinematic"},
-    {"narration": "처음엔 딱 만 원 벌었습니다. 커피 한 잔 값이었죠.", "subtitle": "첫 수익은 딱 만 원", "visual_query": "single coffee cup on desk at night, warm lamp light, moody"},
-    {"narration": "근데 석 달 뒤, 부업 수입이 월급의 절반을 넘었습니다.", "subtitle": "석 달 뒤, 월급의 절반", "visual_query": "laptop screen with rising chart at night, hands typing, cinematic"}
+    {"narration": "월 30만원 부업, 시작은 선부터 그었어.", "subtitle": "시작은 선부터 그었어", "visual_query": "korean man writing plan in notebook at night, warm lamp, cinematic"},
+    {"narration": "첫 주 수익은 0원, 다음 주는 4천원.", "subtitle": "첫 주 수익은 0원", "visual_query": "empty wallet on wooden desk, moody close up, shallow depth of field"},
+    {"narration": "근데 3주째에 하루 만원이 찍혔어.", "subtitle": "3주째 하루 만원", "visual_query": "phone screen showing small payment notification, hand holding phone, night"},
+    {"narration": "바뀐 건 딱 하나, 올리는 시간을 지킨 거야.", "subtitle": "바뀐 건 시간 하나", "visual_query": "alarm clock on desk beside laptop, early morning light, cinematic"},
+    {"narration": "매일 같은 시간에 한 개씩만 올렸어.", "subtitle": "매일 같은 시간 한 개", "visual_query": "person posting on phone at same desk every evening, cozy room"},
+    {"narration": "너네는 요즘 뭐 하고 있어?", "subtitle": "너네는 요즘 뭐 해?", "visual_query": "korean city street at dusk, people walking, warm street light, bokeh"}
   ]
 }

@@ -425,7 +425,7 @@
         <span class="where">주제 입력으로</span>
       </div>
       <h2>2. 대본 다듬기</h2>
-      <p class="sub">나레이션은 목소리로, 자막은 화면에 크게, 비주얼 프롬프트는 배경 이미지 검색어로 쓰입니다.</p>
+      <p class="sub">나레이션은 목소리로(15~32자), 자막은 화면에 뜨는 한 줄, 비주얼 프롬프트는 배경 이미지 검색어로 쓰입니다. 나레이션은 호흡 단위로 끊겨 자막에 순서대로 뜹니다.</p>
       <div class="note" id="scriptLog" style="display:none"></div>
 
       <label class="f" for="hookTitle">영상 훅 제목 <span style="color:var(--muted);font-weight:700">(상단 노란 배너)</span></label>
@@ -458,7 +458,7 @@
       <div class="kv"><span>해상도 / 프레임</span><b>1080×1920 · 30fps</b></div>
       <div class="kv"><span>컷 수 / 예상 길이</span><b id="sumCuts">-</b></div>
       <div class="kv"><span>목소리 / 속도</span><b id="sumVoice">-</b></div>
-      <div class="kv"><span>비주얼 소스</span><b id="sumVisual">Pexels → AI 이미지 → 그라데이션</b></div>
+      <div class="kv"><span>비주얼 소스</span><b id="sumVisual">Pexels → AI 이미지 → 무료 사진 → 그라데이션</b></div>
 
       <div class="note" id="renderNote" style="margin-top:16px">
         렌더가 끝나면 <b>GitHub Release</b>에 MP4가 올라가고, 아이폰 사파리에서 바로 재생·저장할 수 있습니다.
@@ -797,7 +797,7 @@ let previewIdx = 0;
 
 function estimateDur(text){
   const chars = (text||'').replace(/\s/g,'').length;
-  return Math.max(2.4, Math.min(14, chars/7.2 + 0.8)); // +12% 속도 가정
+  return Math.max(2.2, Math.min(12, chars/4.2 + 0.62)); // +12% 속도 실측값
 }
 
 function renderPreview(){
@@ -829,13 +829,13 @@ function renderCuts(){
       <div class="cut-head">
         <span class="idx">${i+1}</span>
         <span style="font-size:12.5px;font-weight:800;color:#5b6274">CUT ${i+1}</span>
-        <span class="dur">약 ${estimateDur(c.narration||c.subtitle||'').toFixed(1)}초</span>
+        <span class="dur">약 ${estimateDur(c.narration||c.subtitle||'').toFixed(1)}초${(c.narration||'').trim().length>34?' · <b style="color:#d83b3b">길어요</b>':''}</span>
         <button class="del" data-del="${i}">삭제</button>
       </div>
       <div class="cut-body">
         <div>
           <span class="mini">나레이션 (목소리로 읽을 문장)</span>
-          <textarea rows="2" data-f="narration" data-i="${i}" placeholder="말하듯 자연스럽게 1~2문장">${esc(c.narration)}</textarea>
+          <textarea rows="2" data-f="narration" data-i="${i}" placeholder="말하듯 짧게 15~32자">${esc(c.narration)}</textarea>
         </div>
         <div class="two">
           <div>
@@ -1028,40 +1028,44 @@ async function aiJson({geminiPrompt, freePrompt, say=null, geminiLog=null}){
 }
 
 function scriptPrompt(){
-  return `너는 한국 유튜브 쇼츠·릴스 전문 대본 작가다. 아래 주제로 9:16 세로 쇼츠 대본을 쓴다.
+  return `너는 한국 숏폼(쇼츠·릴스) 대본 작가다. 아래 주제로 9:16 세로 쇼츠 대본을 쓴다.
 
 주제: ${S.topic || S.title}
 톤: ${S.tone}
 
 조건:
-- cuts는 5~6개. 전체 35~45초 분량(한 컷 6~9초).
-- narration: 실제로 말하는 자연스러운 구어체 1~2문장, 45자 안팎. 첫 컷은 3초 안에 시선을 잡는 훅.
-- subtitle: 화면에 크게 띄울 10~22자. 핵심만. 마침표·따옴표·말줄임표 없이.
-- visual_query: 배경 이미지용 영어 프롬프트 8~14단어. 인물/장소/사물 + 분위기·조명. 이미지 안에 글자가 들어가면 안 됨.
-- title: 상단 배너에 들어갈 훅 제목 12~22자.
-- 마지막 컷은 억지 CTA 대신 여운 있는 마무리나 바로 써먹을 팁.
-- AI 말투 금지: "여러분", "지금부터", "알아보겠습니다" 같은 상투어 쓰지 말 것.
+- cuts는 5~6개. 전체 25~32초. 한 컷은 3~5초.
+- narration: 15~32자(공백 포함)의 짧은 입말 한 문장. 32자를 절대 넘기지 말 것. 두 문장 이어 붙이지 말 것.
+- 1번 컷은 2초 안에 시선을 잡는 후킹(공감·반전·질문). 15~24자.
+- 마지막 컷은 여운이나 댓글 유도("너네는 어때?" 같은 짧은 질문).
+- subtitle: 화면에 띄울 입말 10~18자. narration을 줄인 실제 말투. "로봇 식당" 같은 2~3단어 제목 금지.
+- 금지: 교훈·설명체·번역투. "여러분", "지금부터", "알아보겠습니다", "~해야 합니다", "우리도 ~해 보자", "중요합니다", "~라는 사실".
+- 입말: "~했어", "~더라", "~거든", "~잖아" 위주. "~습니다" 남발 금지.
+- visual_query: 영어 8~14단어. 인물/장소/사물 + 분위기·조명. 이미지 안에 글자 금지, 세로 구도.
+- title: 상단 노란 배너 훅 제목 12~22자. 과장 낚시 금지, 주제 그대로.
+- 주제에 없는 브랜드·상품·금액·숫자는 지어내지 말 것.
 
 JSON만 출력:
 {"title":"...","cuts":[{"narration":"...","subtitle":"...","visual_query":"..."}]}`;
 }
 
 /* 무료 AI용 같은 형식의 짧은 프롬프트 (800토큰 한도 안에 들어가게) */
-function scriptPromptFree(n=5){
+function scriptPromptFree(n=6){
   return `주제: ${S.topic || S.title}
 톤: ${S.tone}
 
-${n}컷 쇼츠 대본을 아래 JSON 형식으로만 출력해. 설명·인사말·마크다운 금지.
-{"title":"훅 제목 12~22자","cuts":[{"narration":"구어체 1~2문장 40자 안팎","subtitle":"10~20자 핵심","visual_query":"6~9 english words only"}]}
+${n}컷 쇼츠 대본. 아래 JSON만 출력. 설명·인사말·마크다운 금지.
+{"title":"훅 제목 12~22자","cuts":[{"narration":"15~32자 입말 한 문장","subtitle":"10~18자 입말","visual_query":"8~14 english words"}]}
 
 규칙
-- 1컷은 3초 안에 시선을 잡는 훅, 마지막 컷은 여운 있는 마무리나 바로 써먹을 팁.
-- 주제에 없는 브랜드·상품·금액은 지어내지 말 것. 확인된 것만 말할 것. 숫자·기간·인원도 지어내지 말 것.
-- 쉬운 말로. 한자어·과한 비유 대신 실제로 말하듯.
-- narration과 subtitle은 같은 이야기로 이어지게.
-- subtitle은 마침표·따옴표 없이.
-- visual_query는 반드시 영어 단어만(한글 금지), 6~9단어, 인물/장소/사물 + 분위기·조명.
-- "여러분", "지금부터", "알아보겠습니다" 같은 상투어 금지.`;
+- 전체 25~32초. 한 컷 3~5초.
+- narration은 15~32자(공백 포함). 32자를 넘기면 실패. 두 문장 금지.
+- 1컷은 2초 안에 시선을 잡는 후킹, 마지막 컷은 여운이나 댓글 유도 질문.
+- subtitle은 화면에 띄울 입말 10~18자. 2~3단어 제목 금지.
+- 금지: "여러분", "지금부터", "알아보겠습니다", "~해야 합니다", "우리도 ~해 보자", "중요합니다".
+- 주제에 없는 브랜드·상품·금액·숫자는 지어내지 말 것.
+- 쉬운 말로. 실제로 말하듯 자연스럽게.
+- visual_query는 반드시 영어만(한글 금지), 8~14단어, 인물/장소/사물 + 분위기·조명.`;
 }
 
 /* ── 배경 이미지 검색어(영어) 보정 + 기본 틀 대본 ───────── */
@@ -1098,7 +1102,7 @@ function ensureEnglishVisual(q, i=0){
   return en.split(' ').filter(Boolean).length >= 3 ? en.slice(0,120) : localVisual(i);
 }
 function cleanSubtitle(v){
-  return String(v||'').replace(/[.。!?！？"'“”‘’…]+$/g,'').replace(/\s+/g,' ').trim().slice(0,26);
+  return String(v||'').replace(/[.。!?！？"'“”‘’…]+$/g,'').replace(/\s+/g,' ').trim().slice(0,22);
 }
 function cleanNarration(v){
   return String(v||'').replace(/\s+/g,' ').trim().slice(0,140);
@@ -1120,18 +1124,18 @@ function templateScript(){
   const t = (S.topic||'').trim() || '내 이야기';
   const key = t.replace(/[?!.,]/g,'').split(/\s+/).slice(0,3).join(' ') || t;
   const mid = S.tone==='정보 꿀팁'
-    ? {n:'돈도 시간도 많이 안 들어. 오늘 10분이면 충분해.', s:'10분이면 충분'}
+    ? {n:'돈도 시간도 별로 안 들어. 하루 10분이면 돼.', s:'하루 10분이면 돼'}
     : S.tone==='제품 리뷰'
-      ? {n:'가격 생각하면 지금이 제일 괜찮았어.', s:'가격 대바 괜찮아'}
-      : {n:'솔직히 처음엔 나만 손해 보는 줄 알았어.', s:'나만 손해인 줄'};
+      ? {n:'가격 생각하면 지금이 제일 괜찮았어.', s:'가격 대비 괜찮아'}
+      : {n:'솔직히 처음엔 나만 손해인 줄 알았어.', s:'나만 손해인 줄'};
   return {
     title: t.slice(0,22),
     cuts: [
-      {narration:`${key}, 한 번쯤 궁금했을 거야.`, subtitle:`${key} 궁금했다면`, visual_query:localVisual(0)},
-      {narration:'나도 반신반의로 시작했는데, 하고 나서 생각이 바뀌었어.', subtitle:'해보고 바뀐 생각', visual_query:localVisual(1)},
-      {narration:'제일 크게 달라진 건 속도가 아니라 매일 한다는 거였어.', subtitle:'바뀐 건 습관', visual_query:localVisual(2)},
+      {narration:`${key}, 나도 궁금해서 해봤어.`, subtitle:`${key} 해봤어`, visual_query:localVisual(0)},
+      {narration:'첫날엔 아무 일도 안 일어났어.', subtitle:'첫날은 그냥 그랬어', visual_query:localVisual(1)},
+      {narration:'근데 일주일쯤 지나니까 달라지더라.', subtitle:'일주일 뒤 달라졌어', visual_query:localVisual(2)},
       {narration:mid.n, subtitle:mid.s, visual_query:localVisual(3)},
-      {narration:`${key}, 궁금하면 오늘 한 번만 해 봐. 그게 시작이야.`, subtitle:'오늘 한 번부터', visual_query:localVisual(4)}
+      {narration:'너네는 어때? 해봤으면 댓글에 남겨줘.', subtitle:'너네는 어때?', visual_query:localVisual(4)}
     ]
   };
 }
@@ -1150,7 +1154,7 @@ async function makeScript(say){
       if(say) say('Gemini 응답이 없어 무료 AI로 넘어갑니다…');
     }
   }
-  for(const n of [5,4]){
+  for(const n of [6,5]){
     assertGen();
     try{
       const data = await pollinations([
