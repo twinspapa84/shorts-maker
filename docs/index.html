@@ -218,6 +218,7 @@
     text-shadow:0 2px 0 #000, 0 -1px 0 #000, 2px 0 0 #000, -2px 0 0 #000, 0 6px 16px rgba(0,0,0,.7);
     word-break:keep-all;
   }
+  .phone .sub .hl{color:#FFD400; font-style:normal}
   .phone .empty-hint{position:absolute; inset:0; display:grid; place-items:center; color:#5d667e; font-size:12px; font-weight:700; text-align:center; padding:20px}
   .phone .rendering{position:absolute; inset:0; display:grid; place-items:center; background:rgba(6,8,14,.72); backdrop-filter:blur(2px)}
   .ring{width:74px; height:74px; border-radius:50%; border:3px solid rgba(255,255,255,.16); border-top-color:var(--amber); animation:spin 1s linear infinite; margin:0 auto 12px}
@@ -428,7 +429,8 @@
         <span class="where">주제 입력으로</span>
       </div>
       <h2>2. 대본 다듬기</h2>
-      <p class="sub">나레이션은 목소리로(15~32자), 자막은 화면에 뜨는 한 줄, 비주얼 프롬프트는 배경 이미지 검색어로 쓰입니다. 나레이션은 호흡 단위로 끊겨 자막에 순서대로 뜹니다. <b>상품 사진 URL</b>을 넣으면 그 사진이 배경이 됩니다(쇼핑 영상용).</p>
+      <p class="sub">나레이션은 목소리로(15~32자), 자막은 화면에 뜨는 한 줄, 비주얼 프롬프트는 배경 이미지 검색어로 쓰입니다. 나레이션은 호흡 단위로 끊겨 자막에 순서대로 뜹니다. <b>상품 사진 / GIF / 영상 URL</b>을 넣으면 그 미디어가 배경이 됩니다(쇼핑 영상용 · GIF·MP4는 움직이는 채로 재생).</p>
+      <div class="hint" style="margin:-8px 0 14px">자막에 <b>**단어**</b>처럼 별표 두 개로 감싸면 그 단어만 <b style="color:#a97c00">노란색</b>으로 강조되고, 목소리로 읽을 때는 별표가 빠집니다. 숫자·가격(예: 18,700원, 45종)은 자동으로 노란색이 돼요.</div>
       <div class="note" id="scriptLog" style="display:none"></div>
 
       <label class="f" for="hookTitle">영상 훅 제목 <span style="color:var(--muted);font-weight:700">(상단 노란 배너)</span></label>
@@ -667,6 +669,9 @@ function load(){
 const $ = (s,r=document)=>r.querySelector(s);
 const $$ = (s,r=document)=>[...r.querySelectorAll(s)];
 const esc = s => String(s??'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+/* **단어** 마크업: 길이 계산·캡션에는 벗기고, 미리보기에는 노란 강조로 그립니다 */
+const marks = s => String(s??'').replace(/\*\*/g,'');
+const highlightHTML = s => esc(s).replace(/\*\*(.+?)\*\*/g, '<em class="hl">$1</em>');
 const sleep = ms => new Promise(r=>setTimeout(r,ms));
 
 /* ── 중단(취소) 지원 ─────────────────────────────────────
@@ -799,7 +804,7 @@ window.addEventListener('popstate', e=>{
 let previewIdx = 0;
 
 function estimateDur(text){
-  const chars = (text||'').replace(/\s/g,'').length;
+  const chars = marks(text).replace(/\s/g,'').length;
   return Math.max(2.2, Math.min(12, chars/4.2 + 0.62)); // +12% 속도 실측값
 }
 
@@ -809,7 +814,7 @@ function renderPreview(){
   const cut = cuts[previewIdx];
   $('#phoneHook').textContent = S.title || '주제를 입력하면 여기에 훅 제목이 나옵니다';
   $('#phoneHook').style.opacity = S.title ? 1 : .55;
-  $('#phoneSub').textContent = cut.subtitle || cut.narration || '자막 미리보기';
+  $('#phoneSub').innerHTML = highlightHTML(cut.subtitle || cut.narration || '자막 미리보기');
   $('#previewCut').textContent = `CUT ${previewIdx+1} / ${cuts.length}`;
 
   const prog = $('#phoneProg');
@@ -832,7 +837,7 @@ function renderCuts(){
       <div class="cut-head">
         <span class="idx">${i+1}</span>
         <span style="font-size:12.5px;font-weight:800;color:#5b6274">CUT ${i+1}</span>
-        <span class="dur">약 ${estimateDur(c.narration||c.subtitle||'').toFixed(1)}초${(c.narration||'').trim().length>34?' · <b style="color:#d83b3b">길어요</b>':''}</span>
+        <span class="dur">약 ${estimateDur(c.narration||c.subtitle||'').toFixed(1)}초${marks(c.narration||'').trim().length>34?' · <b style="color:#d83b3b">길어요</b>':''}</span>
         <button class="del" data-del="${i}">삭제</button>
       </div>
       <div class="cut-body">
@@ -852,13 +857,13 @@ function renderCuts(){
         </div>
         <div style="display:flex; gap:10px; flex-wrap:wrap">
           <div style="flex:3 1 260px">
-            <span class="mini">상품 사진 URL (선택 · 비우면 AI 이미지)</span>
-            <input type="text" data-f="image_url" data-i="${i}" value="${esc(c.image_url||'')}" placeholder="https://… 상품 이미지 주소를 붙여넣기" />
+            <span class="mini">상품 사진 / GIF / 영상 URL (선택)</span>
+            <input type="text" data-f="image_url" data-i="${i}" value="${esc(c.image_url||'')}" placeholder="https://… .jpg / .gif / .mp4 주소를 붙여넣기" />
           </div>
           <div style="flex:1 1 130px">
-            <span class="mini">사진 배치</span>
+            <span class="mini">사진·영상 배치</span>
             <select data-f="image_fit" data-i="${i}">
-              <option value="blur"${(c.image_fit||'blur')==='blur'?' selected':''}>블러 배경 + 가운데 상품</option>
+              <option value="blur"${(c.image_fit||'blur')==='blur'?' selected':''}>블러 배경 + 가운데 카드</option>
               <option value="fill"${c.image_fit==='fill'?' selected':''}>화면 꽉 채움</option>
             </select>
           </div>
@@ -1062,10 +1067,11 @@ function scriptPrompt(){
 
 조건:
 ${cutRule}
-- narration: 15~32자(공백 포함)의 짧은 입말 한 문장. 32자를 절대 넘기지 말 것. 두 문장 이어 붙이지 말 것.
+- narration: 15~32자(공백 포함 · 별표 제외)의 짧은 입말 한 문장. 32자를 절대 넘기지 말 것. 두 문장 이어 붙이지 말 것.
 - 1번 컷은 2초 안에 시선을 잡는 후킹(공감·반전·질문). 15~24자.
 - 마지막 컷은 여운이나 댓글 유도("너네는 어때?" 같은 짧은 질문).
 - subtitle: 화면에 띄울 입말 10~18자. narration을 줄인 실제 말투. "로봇 식당" 같은 2~3단어 제목 금지.
+- narration 안의 가장 센 단어 1개(가격·숫자·반전 단어)를 **단어** 처럼 별표 두 개로 감싸라. 컷당 1~2개만. 예) "이거 **만팔천원대**인데 **비트 45종** 다 와요." / "원래 **20만원대**인데 이건 반값이야."
 - 금지: 교훈·설명체·번역투. "여러분", "지금부터", "알아보겠습니다", "~해야 합니다", "우리도 ~해 보자", "중요합니다", "~라는 사실".
 - 입말: "~했어", "~더라", "~거든", "~잖아" 위주. "~습니다" 남발 금지.
 - visual_query: 영어 8~14단어. 인물/장소/사물 + 분위기·조명. 이미지 안에 글자 금지, 세로 구도.
@@ -1090,7 +1096,8 @@ function scriptPromptFree(n=6){
 - 1컷: 불편함 공감이나 가격·체감 후킹. 예) "창문 틈 바람 못 참겠어서 샀는데"
 - 2~4컷: 핵심 장점 → 실제로 달라진 점 → 단점 솔직하게.
 - 5컷: 부담 없는 행동 유도. 예) "어디 건지 궁금하면 고정댓글 확인"
-- narration 15~32자(공백 포함), 두 문장 금지.
+- narration 15~32자(별표 제외), 두 문장 금지.
+- narration 핵심 단어 1개(가격·숫자·반전)를 **단어** 처럼 별표 두 개로 감싸기. 예) "이거 **만팔천원대**인데 **비트 45종** 다 와요."
 - 광고 말투 금지: "최고", "완벽", "무조건", "역대급", "여러분". 써 본 사람 말투로.
 - 효과·수치·가격은 주제에 있는 것만. 지어내지 말 것.
 - visual_query는 영어만 8~14단어.`;
@@ -1103,9 +1110,10 @@ ${n}컷 쇼츠 대본. 아래 JSON만 출력. 설명·인사말·마크다운 �
 
 규칙
 - 전체 25~32초. 한 컷 3~5초.
-- narration은 15~32자(공백 포함). 32자를 넘기면 실패. 두 문장 금지.
+- narration은 15~32자(별표 제외). 32자를 넘기면 실패. 두 문장 금지.
 - 1컷은 2초 안에 시선을 잡는 후킹, 마지막 컷은 여운이나 댓글 유도 질문.
 - subtitle은 화면에 띄울 입말 10~18자. 2~3단어 제목 금지.
+- narration 핵심 단어 1개(숫자·가격·반전 단어)를 **단어** 처럼 별표 두 개로 감싸기. 컷당 1~2개만.
 - 금지: "여러분", "지금부터", "알아보겠습니다", "~해야 합니다", "우리도 ~해 보자", "중요합니다".
 - 주제에 없는 브랜드·상품·금액·숫자는 지어내지 말 것.
 - 쉬운 말로. 실제로 말하듯 자연스럽게.
@@ -1432,6 +1440,7 @@ function payload(){
    렌더
    ══════════════════════════════════════════════════════════ */
 let pollTimer = null;
+let lastPollAt = 0;         // 마지막으로 GitHub 상태를 찔렀던 시각(중복 폴링 방지)
 let renderToken = 0;        // 중단할 때마다 올려 진행 중인 폴링 루프를 무효화
 let renderActive = false;   // 지금 이 화면이 렌더를 따라가는 중인가
 let pendingDispatchAt = 0;  // 중단 시 런을 못 찾았을 때 되짚어 취소할 기준 시각
@@ -1574,6 +1583,7 @@ async function startRender(){
 async function pollRun(id, token = renderToken){
   clearTimeout(pollTimer);
   if(token !== renderToken) return;
+  lastPollAt = Date.now();
   try{
     const run = await gh(`/repos/${repo()}/actions/runs/${id}`);
     if(token !== renderToken) return;                       // 중단됨 → 이후 갱신·재예약 안 함
@@ -1663,7 +1673,7 @@ function baseTags(){
 }
 
 function templateCaptions(){
-  const lines = S.cuts.map(c=>c.subtitle).filter(Boolean);
+  const lines = S.cuts.map(c=>marks(c.subtitle)).filter(Boolean);
   const body = lines.slice(0,4).join('\n');
   const tags = baseTags();
   return {
@@ -1682,7 +1692,7 @@ async function buildCaptions(){
 제목: ${S.title}
 주제: ${S.topic}
 톤: ${S.tone}
-자막들: ${S.cuts.map(c=>c.subtitle).filter(Boolean).join(' / ')}
+자막들: ${S.cuts.map(c=>marks(c.subtitle)).filter(Boolean).join(' / ')}
 
 규칙:
 - instagram: 2~3줄, 친근한 구어체, 마지막 줄에 해시태그 6~8개
@@ -1693,7 +1703,7 @@ JSON만: {"instagram":"...","youtube":"...","tiktok":"..."}`;
   const freePrompt = `한국어 숏폼 업로드 캡션 3종을 JSON으로만 출력해. 설명·마크다운 금지.
 제목: ${S.title}
 주제: ${S.topic}
-자막: ${S.cuts.map(c=>c.subtitle).filter(Boolean).join(' / ')}
+자막: ${S.cuts.map(c=>marks(c.subtitle)).filter(Boolean).join(' / ')}
 
 형식: {"instagram":"2~3줄 + 해시태그 6~8개","youtube":"제목 + 한 줄 + #Shorts + 해시태그 4~6개","tiktok":"1~2줄 + 해시태그 4~6개"}
 이모지·광고문구·"여러분" 같은 상투어 금지.`;
@@ -1829,6 +1839,22 @@ function syncRenderSummary(){
     ]);
   }
 }
+
+/* 아이폰에서 화면이 꺼졌다 켜지거나 다른 앱에 다녀오면(타이머가 멈춤)
+   돌아오는 순간 GitHub 상태를 다시 찔러 완료 화면이 확실히 뜨게 합니다. */
+function resumeRenderPolling(){
+  if(!renderActive) return;
+  if(!(S.run && S.run.id) || S.run.stopped) return;
+  if(Date.now() - lastPollAt < 2500) return;   // 방금 확인했으면 건너뜀(중복 요청 방지)
+  clearTimeout(pollTimer); pollTimer = null;
+  pollRun(S.run.id, renderToken);
+}
+document.addEventListener('visibilitychange', ()=>{
+  if(document.visibilityState === 'visible') resumeRenderPolling();
+});
+window.addEventListener('pageshow', e=>{ if(e.persisted) resumeRenderPolling(); });
+window.addEventListener('focus', resumeRenderPolling);
+window.addEventListener('online', resumeRenderPolling);
 
 /* ══════════════════════════════════════════════════════════
    초기화

@@ -59,6 +59,12 @@ STRIP_Y = SUB_BOTTOM - STRIP_H
 SUB_MAX_W = 900
 AMBER = (255, 205, 0)
 AMBER_SOFT = (255, 214, 60)
+SUB_WHITE = (255, 255, 255)
+SUB_YELLOW = (255, 212, 0)     # @shortspick100 스타일 강조 노랑
+SUB_SIZES = (104, 96, 90, 84, 78, 72, 66)   # 기존(88~52) 대비 +18% 크게
+
+# 상품 GIF/영상이 올라가는 카드 (가운데, 하단 1200px 이하)
+CARD_MAX_W, CARD_MAX_H, CARD_BOTTOM = 972, 780, 1150   # 자막 블록과 겹치지 않는 선
 
 ROOT = Path(__file__).resolve().parent.parent
 FONT_DIR = ROOT / "assets" / "fonts"
@@ -519,6 +525,100 @@ def download_image(url: str, timeout: int = 45) -> bytes | None:
         return None
 
 
+def download_media(url: str, timeout: int = 90) -> tuple[bytes, str] | None:
+    """URL에서 바이트 + Content-Type 을 그대로 받아옵니다(사진·GIF·영상 판별은 뒤에서)."""
+    url = (url or "").strip()
+    if not re.match(r"^https?://", url, re.I):
+        return None
+    try:
+        import requests
+
+        r = requests.get(url, timeout=timeout, headers={"User-Agent": UA}, allow_redirects=True)
+        r.raise_for_status()
+        return r.content, r.headers.get("Content-Type", "")
+    except Exception as e:  # noqa: BLE001
+        log(f"  상품 미디어 다운로드 실패: {e}")
+        return None
+
+
+CLIP_EXTS = (".mp4", ".mov", ".webm", ".m4v", ".avi", ".mkv", ".gif")
+
+
+def sniff_media(data: bytes, content_type: str = "") -> str:
+    """바이트 시그니처(+Content-Type)로 'image' / 'gif' / 'video' 를 판별합니다.
+    판별이 어려우면 빈 문자열."""
+    if not data or len(data) < 64:
+        return ""
+    ct = (content_type or "").lower().split(";")[0].strip()
+    head = data[:32]
+    if head[:4] == b"GIF8" or ct == "image/gif":
+        return "gif"
+    if head[4:8] == b"ftyp" or head[:4] == b"\x1aE\xdf\xa3" or ct.startswith("video/"):
+        return "video"
+    if head[:4] == b"RIFF" and head[8:12] == b"AVI ":
+        return "video"
+    if head[:4] == b"RIFF" and head[8:12] == b"WEBP":
+        # 애니메이션 WebP 는 영상처럼 다룹니다
+        return "gif" if data[12:16] == b"ANIM" else "image"
+    if head[:4] == b"\x89PNG" or head[:2] == b"\xff\xd8" or head[:4] == b"RIFF" or head[:2] == b"BM":
+        return "image"
+    if ct.startswith("image/"):
+        return "image"
+    return ""
+
+
+def probe_clip(path: Path) -> tuple[int, int] | None:
+    """클립의 원본 가로·세로를 잽니다(ffprobe 없으면 첫 프레임 디코딩). 실패하면 None."""
+    ffprobe = shutil.which("ffprobe")
+    if ffprobe:
+        try:
+            out = subprocess.run(
+                [ffprobe, "-v", "error", "-select_streams", "v:0",
+                 "-show_entries", "stream=width,height", "-of", "csv=p=0:s=x", str(path)],
+                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=60,
+            )
+            txt = out.stdout.decode("utf-8", "replace").strip().splitlines()
+            if txt and "x" in txt[0]:
+                w, h = [int(float(v)) for v in txt[0].split("x")[:2]]
+                if w > 1 and h > 1:
+                    return w, h
+        except Exception:  # noqa: BLE001
+            pass
+    png = path.with_suffix(".probe.png")
+    for extra in ([], ["-ss", "0.2"]):
+        try:
+            run([FFMPEG, "-y", *extra, "-i", str(path), "-frames:v", "1", str(png)])
+            from PIL import Image
+
+            with Image.open(png) as im:
+                w, h = im.size
+            png.unlink(missing_ok=True)
+            if w > 1 and h > 1:
+                return w, h
+        except Exception:  # noqa: BLE001
+            png.unlink(missing_ok=True)
+    return None
+
+
+def save_clip(data: bytes, dest: Path, url: str = "") -> str | None:
+    """내려받은 GIF/영상 바이트를 파일로 저장하고 크기를 확인합니다."""
+    m = re.search(r"\.([a-zA-Z0-9]{2,5})(?:$|[?#])", url or "")
+    ext = f".{m.group(1).lower()}" if m and f".{m.group(1).lower()}" in CLIP_EXTS else ""
+    if not ext:
+        ext = ".gif" if data[:4] == b"GIF8" else ".mp4"
+    p = dest.with_suffix(f".clip{ext}")
+    try:
+        p.write_bytes(data)
+    except Exception as e:  # noqa: BLE001
+        log(f"  클립 저장 실패: {e}")
+        return None
+    if not probe_clip(p):
+        log("  클립을 읽지 못했습니다(GIF/영상 아님) — 사진으로 다시 시도합니다.")
+        p.unlink(missing_ok=True)
+        return None
+    return str(p)
+
+
 def product_frame(data: bytes, dest: Path, fit: str = "blur") -> str | None:
     """상품 사진을 9:16 한 장으로 합성합니다.
     기본(fit=blur): 같은 사진을 어둡게 블러한 배경 + 가운데 선명한 상품(정방형도 안 잘림).
@@ -551,10 +651,10 @@ def product_frame(data: bytes, dest: Path, fit: str = "blur") -> str | None:
         bg = ImageEnhance.Color(bg).enhance(0.85)
         canvas = bg.convert("RGBA")
 
-        max_w, max_h = int(W * 0.90), int(H * 0.42)
+        max_w, max_h = CARD_MAX_W, CARD_MAX_H
         sc = min(max_w / w, max_h / h)
         fw, fh = max(1, int(w * sc)), max(1, int(h * sc))
-        top = 1200 - fh
+        top = CARD_BOTTOM - fh
         x = (W - fw) // 2
 
         # 부드러운 그림자
@@ -689,13 +789,31 @@ def fetch_visual(query: str, index: int, work: Path, pexels_key: str = "",
             pass
         return path, name
 
-    # 사용자가 붙여넣은 실제 상품 사진이 있으면 무조건 최우선
+    # 사용자가 붙여넣은 실제 상품 사진/GIF/영상이 있으면 무조건 최우선
     if image_url:
-        data = download_image(image_url)
-        if data:
-            path = product_frame(data, dest, "fill" if image_fit == "fill" else "blur")
-            if path:
-                return done(path, "product-fill" if image_fit == "fill" else "product")
+        got_media = download_media(image_url)
+        if got_media:
+            data, ctype = got_media
+            mkind = sniff_media(data, ctype)
+            if mkind in ("gif", "video"):
+                path = save_clip(data, dest, image_url)
+                if path:
+                    kind = "clip-fill" if image_fit == "fill" else "clip-blur"
+                    return done(path, kind)
+                path = product_frame(data, dest, "fill" if image_fit == "fill" else "blur")
+                if path:
+                    return done(path, "product-fill" if image_fit == "fill" else "product")
+            else:
+                path = product_frame(data, dest, "fill" if image_fit == "fill" else "blur")
+                if path:
+                    return done(path, "product-fill" if image_fit == "fill" else "product")
+        else:
+            # 예전처럼 사진만 시도하는 경로(작은 이미지·특이한 서버 대응)
+            data = download_image(image_url)
+            if data:
+                path = product_frame(data, dest, "fill" if image_fit == "fill" else "blur")
+                if path:
+                    return done(path, "product-fill" if image_fit == "fill" else "product")
 
     if pexels_key:
         got = pexels_visual(query, pexels_key, dest, seed)
@@ -798,6 +916,119 @@ def rounded(draw, box, radius, fill=None, outline=None, width=1):
     draw.rounded_rectangle(box, radius=radius, fill=fill, outline=outline, width=width)
 
 
+# ----------------------------------------------------------------------------
+# 자막 강조 마크업 (**단어** → 노랑)
+# ----------------------------------------------------------------------------
+MARK_RE = re.compile(r"\*\*(.+?)\*\*", re.S)
+
+# 숫자+단위 (18,700원 · 45종 · 5초 · 20만원대 · 3배 …)
+NUM_UNIT = re.compile(
+    r"\d[\d,]*(?:\.\d+)?\s*(?:만\s*)?(?:원대?|종|개|초|분|시간|년|개월|일|주|회|배|프로|%|"
+    r"명|가지|대|권|병|봉|팩|잔|판|세트|살|층|kg|mg|g|ml|mL|L|cm|mm|km|m|도|번)"
+    r"|(?<![\d.,])\d{1,3}(?:,\d{3})+(?:\.\d+)?"
+)
+IMPACT_WORDS = {
+    "무료", "공짜", "반값", "최저", "최고", "특가", "세일", "할인", "인생", "실화",
+    "대박", "반전", "비밀", "유일", "처음", "후회", "실패", "성공", "단점", "장점",
+    "만원", "평생", "무한", "당일", "완벽", "충격", "진심", "꿀팁", "꿀템", "역대급",
+}
+
+
+def strip_marks(text: str) -> str:
+    """TTS·길이 계산용: ** 마크업만 벗긴 순수 문장."""
+    return re.sub(r"\*\*", "", (text or "")).strip()
+
+
+def parse_tokens(text: str) -> list[tuple[str, list[bool]]]:
+    """'**강조**' 마크업을 낱말 토큰(단어, 글자별 노랑여부)으로 바꿉니다.
+    낱말 안에서 강조가 끝나도(예: **만팔천원대**인데) 띄어쓰기가 생기지 않습니다."""
+    raw = re.sub(r"\s+", " ", (text or "")).strip()
+    if raw.count("**") % 2:                        # 짝이 안 맞으면 마지막 별표만 지움
+        raw = raw[::-1].replace("**", "", 1)[::-1]
+    plain = ""
+    styles: list[bool] = []
+    pos = 0
+    for m in MARK_RE.finditer(raw):
+        seg = raw[pos:m.start()]
+        plain += seg
+        styles += [False] * len(seg)
+        hi = m.group(1)
+        plain += hi
+        styles += [True] * len(hi)
+        pos = m.end()
+    tail = raw[pos:]
+    plain += tail
+    styles += [False] * len(tail)
+
+    tokens: list[tuple[str, list[bool]]] = []
+    i = 0
+    while i < len(plain):
+        if plain[i] == " ":
+            i += 1
+            continue
+        j = i
+        while j < len(plain) and plain[j] != " ":
+            j += 1
+        tokens.append((plain[i:j], styles[i:j]))
+        i = j
+    return tokens
+
+
+def styled_plain(tokens: list[tuple[str, list[bool]]]) -> tuple[str, list[bool]]:
+    """토큰들을 한 문장으로 다시 잇습니다(글자별 노랑 여부도 함께)."""
+    plain = ""
+    styles: list[bool] = []
+    for k, (w, st) in enumerate(tokens):
+        if k:
+            plain += " "
+            styles.append(False)
+        plain += w
+        styles += list(st)
+    return plain, styles
+
+
+def tokens_plain(tokens: list[tuple[str, list[bool]]]) -> str:
+    return styled_plain(tokens)[0]
+
+
+def auto_mark_spans(plain: str) -> list[tuple[int, int]]:
+    """마크업이 없을 때 자동으로 노랗게 칠할 곳: 숫자+단위, 그리고 강한 후킹 단어."""
+    spans: list[tuple[int, int, bool]] = [
+        (m.start(), m.end(), True) for m in NUM_UNIT.finditer(plain)
+    ]
+    if not spans:
+        for m in re.finditer(r"[가-힣A-Za-z0-9]{2,}", plain):
+            base = m.group(0).rstrip("은는이가을를도에로써과와의")
+            if base in IMPACT_WORDS or m.group(0) in IMPACT_WORDS:
+                spans.append((m.start(), m.end(), False))
+    out: list[tuple[int, int]] = []
+    for s, e, is_num in spans[:2]:
+        if not is_num:                      # 후킹 단어는 낱말 통째로
+            while s > 0 and not plain[s - 1].isspace():
+                s -= 1
+            while e < len(plain) and not plain[e].isspace():
+                e += 1
+        while e > s and plain[e - 1] in ",.·、!?:;\"'":
+            e -= 1
+        if out and s < out[-1][1]:
+            continue
+        out.append((s, e))
+    return out
+
+
+def chunk_styled_text(chunk: list[tuple[str, list[bool]]]) -> tuple[str, list[bool]]:
+    """자막 한 조각 → (화면에 그릴 문장, 글자별 노랑여부)."""
+    plain, styles = styled_plain(chunk)
+    if plain and not any(styles):
+        spans = auto_mark_spans(plain)
+        marked = sum(e - s for s, e in spans)
+        if spans and marked <= max(2, int(len(plain) * 0.55)):
+            for s, e in spans:
+                for i in range(s, min(e, len(styles))):
+                    styles[i] = True
+    return plain, styles
+
+
 def draw_hook(img, title: str) -> None:
     """상단 훅 타이틀 — 노란 형광펜 마커 + 검정 굵은 글씨."""
     from PIL import ImageDraw
@@ -898,50 +1129,104 @@ def make_ui_overlay(title: str, index: int, total: int, dest: Path) -> Path:
     return dest
 
 
-def pick_sub_font(chunks: list[str]):
+def pick_sub_font(chunks):
     """한 컷 안의 모든 자막 조각이 2줄 안에 들어가는 가장 큰 글씨."""
     from PIL import Image, ImageDraw
 
     probe = ImageDraw.Draw(Image.new("RGB", (8, 8)))
-    for size in (88, 82, 76, 70, 64, 58, 52):
+    plains = [c if isinstance(c, str) else tokens_plain(c) for c in chunks]
+    for size in SUB_SIZES:
         font = load_font(size)
-        if all(len(wrap_text(probe, c, font, SUB_MAX_W)) <= 2 for c in chunks):
+        if all(len(wrap_text(probe, strip_marks(c), font, SUB_MAX_W)) <= 2 for c in plains):
             return font
-    return load_font(52)
+    return load_font(SUB_SIZES[-1])
 
 
-def make_subtitle_strip(text: str, font, dest: Path) -> Path:
-    """하단 자막 한 조각 — 굵은 흰 글씨 + 검정 외곽선 + 반투명 다크 필 + 그림자."""
+def wrap_lines_with_offsets(draw, text: str, font, max_w: float) -> list[tuple[str, int]]:
+    """줄바꿈 결과와 함께, 그 줄이 원본 문장에서 시작하는 글자 위치를 돌려줍니다."""
+    lines = balance_lines(draw, wrap_text(draw, text, font, max_w), font)
+    out: list[tuple[str, int]] = []
+    pos = 0
+    for ln in lines:
+        idx = text.find(ln, pos)
+        if idx < 0:
+            idx = pos
+        out.append((ln, idx))
+        pos = idx + len(ln)
+    return out
+
+
+def _line_runs(line: str, styles: list[bool], start: int) -> list[tuple[str, bool]]:
+    """한 줄을 (글자들, 노랑여부) 덩어리로 나눕니다."""
+    runs: list[tuple[str, bool]] = []
+    i = 0
+    while i < len(line):
+        yellow = styles[start + i] if start + i < len(styles) else False
+        j = i + 1
+        while j < len(line) and (styles[start + j] if start + j < len(styles) else False) == yellow:
+            j += 1
+        runs.append((line[i:j], yellow))
+        i = j
+    return runs
+
+
+def draw_rich_line(d, cx: float, cy: float, line: str, styles: list[bool], start: int,
+                   font, stroke: int) -> None:
+    """가운데 정렬 · 단어별 색(흰/노랑) · 두꺼운 검정 외곽선.
+    외곽선을 먼저 통째로 그려 색이 바뀌는 자리에서도 테두리가 끊기지 않게 합니다."""
+    runs = _line_runs(line, styles, start)
+    widths = [text_width(d, txt, font) for txt, _ in runs]
+    x = cx - sum(widths) / 2
+    xx = x
+    for (txt, _y), wd in zip(runs, widths):
+        d.text((xx, cy), txt, font=font, fill=(0, 0, 0, 255), anchor="lm",
+               stroke_width=stroke, stroke_fill=(0, 0, 0, 255))
+        xx += wd
+    xx = x
+    for (txt, yellow), wd in zip(runs, widths):
+        fill = (*SUB_YELLOW, 255) if yellow else (*SUB_WHITE, 255)
+        d.text((xx, cy), txt, font=font, fill=fill, anchor="lm")
+        xx += wd
+
+
+def make_subtitle_strip(chunk, font, dest: Path) -> Path:
+    """하단 자막 한 조각 — 굵은 흰 글씨 + 노란 강조 + 검정 외곽선 + 다크 필 + 그림자."""
     from PIL import Image, ImageDraw, ImageFilter
+
+    if isinstance(chunk, str):
+        chunk = parse_tokens(chunk)
+    plain, styles = chunk_styled_text(chunk)
+    if not plain:
+        return dest
 
     img = Image.new("RGBA", (W, STRIP_H), (0, 0, 0, 0))
     d = ImageDraw.Draw(img, "RGBA")
-    lines = balance_lines(d, wrap_text(d, text, font, SUB_MAX_W), font)
+    lines = wrap_lines_with_offsets(d, plain, font, SUB_MAX_W)
     if not lines:
         return dest
 
-    line_h = int(font.size * 1.24)
+    line_h = int(font.size * 1.22)
     block_h = line_h * len(lines)
-    y_top = STRIP_H - 16 - block_h
-    maxw = max(text_width(d, ln, font) for ln in lines)
-    pad_x, pad_y = 44, 22
+    y_top = STRIP_H - 10 - block_h
+    maxw = max(text_width(d, ln, font) for ln, _ in lines)
+    pad_x, pad_y = 38, 18
     box = [(W - maxw) / 2 - pad_x, y_top - pad_y, (W + maxw) / 2 + pad_x, y_top + block_h + pad_y]
 
     # 필 뒤 그림자
     shadow = Image.new("RGBA", (W, STRIP_H), (0, 0, 0, 0))
     rounded(ImageDraw.Draw(shadow), [box[0] + 2, box[1] + 10, box[2] + 2, box[3] + 10],
-            radius=34, fill=(0, 0, 0, 160))
+            radius=34, fill=(0, 0, 0, 165))
     img = Image.alpha_composite(img, shadow.filter(ImageFilter.GaussianBlur(16)))
 
     d = ImageDraw.Draw(img, "RGBA")
-    rounded(d, box, radius=34, fill=(8, 9, 13, 168))
+    rounded(d, box, radius=34, fill=(8, 9, 13, 158))
 
-    stroke = max(4, font.size // 10)
-    for i, line in enumerate(lines):
+    stroke = max(6, font.size // 9)
+    for i, (line, start) in enumerate(lines):
         cy = y_top + line_h * i + line_h / 2
-        d.text((W / 2 + 2, cy + 6), line, font=font, fill=(0, 0, 0, 150), anchor="mm", align="center")
-        d.text((W / 2, cy), line, font=font, fill=(255, 255, 255, 255), anchor="mm",
-               align="center", stroke_width=stroke, stroke_fill=(0, 0, 0, 255))
+        # 부드러운 그림자 한 겹
+        d.text((W / 2 + 2, cy + 7), line, font=font, fill=(0, 0, 0, 140), anchor="mm", align="center")
+        draw_rich_line(d, W / 2, cy, line, styles, start, font, stroke)
 
     img.save(dest)
     return dest
@@ -950,6 +1235,30 @@ def make_subtitle_strip(text: str, font, dest: Path) -> Path:
 # ----------------------------------------------------------------------------
 # 자막 호흡 분할 · 타이밍
 # ----------------------------------------------------------------------------
+def split_chunks_tokens(tokens: list[tuple[str, list[bool]]], max_len: int = 15) -> list[list[tuple[str, list[bool]]]]:
+    """토큰 목록을 화면 호흡 단위로 나눕니다(단어 중간에서 **강조**가 끊기지 않음)."""
+    if not tokens:
+        return []
+    total = len(tokens_plain(tokens))
+    if total <= max_len:
+        return [tokens]
+    n_chunks = 3 if total > 30 else 2
+    if len(tokens) < n_chunks:
+        return [tokens]
+    parts: list[list[tuple[str, list[bool]]]] = []
+    prev = 0
+    for k in range(1, n_chunks):
+        best = round(len(tokens) * k / n_chunks)
+        while best < len(tokens) - 1 and len(tokens_plain(tokens[prev:best])) < 4:
+            best += 1
+        while best > prev + 1 and len(tokens_plain(tokens[prev:best])) > 20:
+            best -= 1
+        parts.append(tokens[prev:best])
+        prev = best
+    parts.append(tokens[prev:])
+    return [p for p in parts if p]
+
+
 def split_chunks(text: str, max_len: int = 15) -> list[str]:
     """나레이션을 화면에 띄울 호흡 단위(10~15자)로 나눕니다.
     한국어는 조사가 단어에 붙으므로 '낱말 개수'를 기준으로 끊는 쪽이 말투가 자연스럽습니다."""
@@ -1042,6 +1351,37 @@ def ken_burns_filter(mode: str, frames: int, dur: float, base: float = 1.24,
     )
 
 
+def card_assets(card_w: int, card_h: int, work: Path, idx: int):
+    """영상 카드용 마스크(둥근 모서리)와 그림자 PNG."""
+    from PIL import Image, ImageDraw, ImageFilter
+
+    radius = max(12, int(min(card_w, card_h) * 0.055))
+    mask = Image.new("RGB", (card_w, card_h), (0, 0, 0))
+    ImageDraw.Draw(mask).rounded_rectangle([0, 0, card_w - 1, card_h - 1], radius=radius, fill=(255, 255, 255))
+    mp = work / f"card_{idx:02d}.mask.png"
+    mask.save(mp)
+
+    pad = 44
+    shadow = Image.new("RGBA", (card_w + pad * 2, card_h + pad * 2), (0, 0, 0, 0))
+    ImageDraw.Draw(shadow).rounded_rectangle(
+        [pad, pad + 14, pad + card_w, pad + card_h + 20], radius=radius + 12, fill=(0, 0, 0, 175)
+    )
+    shadow = shadow.filter(ImageFilter.GaussianBlur(22))
+    sp = work / f"card_{idx:02d}.shadow.png"
+    shadow.save(sp)
+    return mp, sp, pad
+
+
+def card_geometry(src_w: int, src_h: int) -> tuple[int, int, int, int]:
+    """원본 비율을 지키며 972x806 안에 들어가는 카드 크기와 (x, top)."""
+    sc = min(CARD_MAX_W / max(src_w, 1), CARD_MAX_H / max(src_h, 1))
+    fw = max(2, int(round(src_w * sc / 2)) * 2)
+    fh = max(2, int(round(src_h * sc / 2)) * 2)
+    fw = min(fw, CARD_MAX_W)
+    fh = min(fh, CARD_MAX_H)
+    return fw, fh, (W - fw) // 2, CARD_BOTTOM - fh
+
+
 def render_cut(
     *,
     index: int,
@@ -1059,20 +1399,33 @@ def render_cut(
     idx = index
     is_last = idx == total - 1
     audio_path = work / f"voice_{idx:02d}.mp3"
+
+    # 화면 자막은 나레이션을 '**노랑**' 마크업이 살아 있는 토큰으로 쪼개 순차 표시
+    spoken = narration if narration.strip() else subtitle
+    spoken_tokens = parse_tokens(spoken)
+    if not spoken_tokens:
+        spoken_tokens = [(strip_marks(spoken) or " ", False)]
+    tts_text = tokens_plain(spoken_tokens)          # TTS 에는 ** 없는 순수 문장
     log(f"[{idx + 1}/{total}] 음성 생성 중…")
-    synthesize(narration, voice, rate, audio_path)
+    synthesize(tts_text, voice, rate, audio_path)
     voice_dur = audio_duration(audio_path)
     pad_after = 0.5 if is_last else (0.24 if idx == 0 else 0.3)
     dur = round(max(voice_dur + pad_after, 1.6), 3)
 
-    # 화면 자막은 나레이션 문장을 호흡 단위로 쪼개 순차 표시
-    spoken = narration if narration.strip() else subtitle
-    chunks = split_chunks(spoken) or [spoken]
-    times = chunk_timings(chunks, voice_dur, dur)
+    chunks = split_chunks_tokens(spoken_tokens) or [spoken_tokens]
+    times = chunk_timings([tokens_plain(c) for c in chunks], voice_dur, dur)
     font = sub_font or pick_sub_font(chunks)
 
-    inputs = ["-loop", "1", "-framerate", str(FPS), "-i", visual] if not visual.endswith(".mp4") \
-        else ["-stream_loop", "-1", "-i", visual]
+    is_clip = visual_kind.startswith("clip")
+    clip_fill = visual_kind.endswith("fill")
+    is_video_file = is_clip or visual.lower().endswith((".mp4", ".mov", ".webm", ".mkv"))
+
+    inputs: list[str] = []
+    if is_video_file:
+        inputs += ["-stream_loop", "-1", "-i", visual]
+    else:
+        inputs += ["-loop", "1", "-framerate", str(FPS), "-i", visual]
+
     ui = make_ui_overlay(title, idx, total, work / f"ui_{idx:02d}.png")
     inputs += ["-loop", "1", "-framerate", str(FPS), "-i", str(ui)]
     strip_paths: list[Path] = []
@@ -1080,12 +1433,48 @@ def render_cut(
         sp = make_subtitle_strip(chunk, font, work / f"sub_{idx:02d}_{k}.png")
         strip_paths.append(sp)
         inputs += ["-loop", "1", "-framerate", str(FPS), "-i", str(sp)]
-    audio_idx = 2 + len(strip_paths)
+    next_idx = 2 + len(strip_paths)
+
+    # 영상·GIF 카드(움직이는 상품)용 마스크/그림자 입력
+    card = None
+    if is_clip and not clip_fill:
+        size = probe_clip(Path(visual)) or (W, H)
+        cw, ch, cx0, cy0 = card_geometry(*size)
+        mask_path, shadow_path, pad = card_assets(cw, ch, work, idx)
+        mask_idx = next_idx
+        inputs += ["-loop", "1", "-framerate", str(FPS), "-i", str(mask_path)]
+        shadow_idx = next_idx + 1
+        inputs += ["-loop", "1", "-framerate", str(FPS), "-i", str(shadow_path)]
+        next_idx += 2
+        card = {"w": cw, "h": ch, "x": cx0, "y": cy0, "mask": mask_idx,
+                "shadow": shadow_idx, "pad": pad}
+
+    audio_idx = next_idx
     inputs += ["-i", str(audio_path)]
 
-    if visual.endswith(".mp4"):
-        bg = (f"scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},"
-              f"fps={FPS},eq=saturation=1.05:contrast=1.03,setsar=1")
+    filt: list[str] = []
+    prev, n = "bg", 1
+    if is_clip and not clip_fill and card:
+        # 어두운 블러 배경(같은 영상이 흐릿하게 움직임) + 가운데 둥근 카드에서 원본 재생
+        filt.append(f"[0:v]fps={FPS},split=2[bgsrc][fgsrc]")
+        filt.append(
+            f"[bgsrc]scale=270:480:force_original_aspect_ratio=increase,crop=270:480,"
+            f"gblur=sigma=14,scale={W}:{H}:flags=bicubic,setsar=1,"
+            f"eq=brightness=-0.13:saturation=0.86:contrast=1.02[bgb]"
+        )
+        filt.append(
+            f"[fgsrc]scale={card['w']}:{card['h']}:force_original_aspect_ratio=decrease,"
+            f"pad={card['w']}:{card['h']}:(ow-iw)/2:(oh-ih)/2:color=0x0b0d14,setsar=1,format=rgba[fgc]"
+        )
+        filt.append(f"[fgc][{card['mask']}:v]alphamerge[cardv]")
+        filt.append(f"[bgb][{card['shadow']}:v]overlay={card['x'] - card['pad']}:{card['y'] - card['pad']}:format=auto[v0]")
+        filt.append(f"[v0][cardv]overlay={card['x']}:{card['y']}:format=auto[v{n}]")
+        prev = f"v{n}"
+        n += 1
+    elif is_video_file:
+        bg = (f"fps={FPS},scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},"
+              f"setsar=1,eq=saturation=1.06:contrast=1.03")
+        filt.append(f"[0:v]{bg}[{prev}]")
     else:
         frames = int(math.ceil(dur * FPS)) + 2
         if visual_kind == "product":
@@ -1094,9 +1483,8 @@ def render_cut(
         else:
             mode, _z = MOTION_MODES[idx % len(MOTION_MODES)]
             bg = ken_burns_filter(mode, frames, dur)
+        filt.append(f"[0:v]{bg}[{prev}]")
 
-    filt = [f"[0:v]{bg}[bg]"]
-    prev, n = "bg", 1
     filt.append(f"[{prev}][1:v]overlay=0:0:format=auto[v{n}]")
     prev = f"v{n}"
     n += 1
@@ -1141,9 +1529,9 @@ def render_cut(
     run(cmd, timeout=1200)
     return {
         "index": idx + 1,
-        "narration": narration,
+        "narration": tts_text,
         "subtitle": subtitle,
-        "chunks": chunks,
+        "chunks": [tokens_plain(c) for c in chunks],
         "duration": dur,
         "voice_seconds": round(voice_dur, 2),
         "visual_source": visual_kind,
@@ -1268,7 +1656,8 @@ def main() -> int:
     all_chunks: list[str] = []
     for cut in cuts_in:
         spoken = (cut.get("narration") or cut.get("subtitle") or "").strip()
-        all_chunks += split_chunks(spoken) or ([spoken] if spoken else [])
+        toks = parse_tokens(spoken)
+        all_chunks += [tokens_plain(c) for c in split_chunks_tokens(toks)] if toks else []
     sub_font = pick_sub_font(all_chunks) if all_chunks else None
 
     started = time.time()
