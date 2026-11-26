@@ -57,7 +57,7 @@ GitHub 앱 권한으로는 `.github/workflows/`에 파일을 올릴 수 없어�
 
 > 스튜디오 상단 **▶ 예시 영상** 버튼을 누르면 이 도구로 만든 24초 결과물을 바로 볼 수 있습니다.
 
-1. **주제 한 줄** 입력 → 톤(유머 썰 / 정보 꿀팁 / 제품 리뷰) · 목소리(남/여) 선택 → **AI 대본 생성**
+1. **주제 한 줄** 입력 → 톤(유머 썰 / 정보 꿀팁 / 제품 리뷰 / **🛒 쇼핑·리뷰 후킹**) · 목소리(남/여) 선택 → **AI 대본 생성**
    - Gemini 키가 없으면 **직접 쓰기**로 진행할 수 있습니다.
 2. **대본 다듬기** — 컷마다 나레이션 / 화면 자막 / 비주얼 프롬프트를 수정합니다. 오른쪽 9:16 프리뷰로 바로 확인.
 3. **렌더링 시작** — GitHub Actions가 영상을 만들고, 끝나면 **Release에 MP4**가 올라옵니다.
@@ -79,6 +79,8 @@ GitHub 앱 권한으로는 `.github/workflows/`에 파일을 올릴 수 없어�
 | 프레임 | 30fps, H.264 + AAC |
 | 길이 | 컷 5~6개, 약 25~32초 (한 컷 3~5초) |
 | 대본 | 컷당 나레이션 15~32자 짧은 입말 (첫 컷 후킹 · 마지막 컷 여운/댓글 유도) |
+| 쇼핑 모드 | `🛒 쇼핑·리뷰 후킹` 톤이면 5컷 20~25초: 불편 공감 → 장점 → 실제 변화 → 단점 → 고정댓글 유도 |
+| 상품 사진 | 컷마다 `image_url` 을 넣으면 그 사진으로 렌더 (블러 배경 + 가운데 상품 / 화면 꽉 채움) |
 | 자막 | 나레이션을 10~15자 호흡 단위로 쪼개 말 속도에 맞춰 순차 표시. 굵은 흰 글씨 + 검정 외곽선 + 반투명 다크 필 |
 | 훅 제목 | 상단 노란 형광펜 배너 (컷 내내 고정) |
 | 모션 | 컷마다 다른 Ken Burns 줌/팬 (정지 화면 없음) |
@@ -111,6 +113,9 @@ payload 형식:
 ```
 
 - `"bgm": false` 를 넣으면 배경음악·효과음 없이 나레이션만 렌더합니다(`--no-bgm` 옵션과 같음).
+- 컷에 `"image_url": "https://…"` 을 넣으면 AI 이미지 대신 **그 상품 사진**이 배경이 됩니다.
+  `"image_fit": "blur"`(기본, 정방형 상품 사진도 안 잘리고 가운데 배치) 또는 `"fill"`(화면 꽉 채움).
+  쇼핑 예시는 `samples/payload_shop.json` 에 있습니다.
 
 `output/`에 `shorts_final.mp4`, `thumbnail.jpg`, `manifest.json`이 생성됩니다.
 
@@ -127,7 +132,8 @@ assets/audio/bgm_lofi.wav           30초 로파이 루프 BGM (직접 생성)
 assets/audio/sfx_whoosh.wav         컷 전환 효과음
 workflow_templates/render-shorts.yml GitHub Actions 워크플로 (웹에서 복사)
 assets/fonts/NanumGothic-*.ttf      한국어 폰트 (OFL)
-samples/payload_sample.json         로컬 테스트용 예시
+samples/payload_sample.json         로컬 테스트용 예시(6컷 썰)
+samples/payload_shop.json           쇼핑/리뷰 예시(5컷 · 상품 사진 URL 포함)
 ```
 
 ---

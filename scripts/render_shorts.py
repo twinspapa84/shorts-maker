@@ -506,6 +506,77 @@ def loremflickr_visual(query: str, dest: Path, seed: int) -> tuple[str, str] | N
     return None
 
 
+def download_image(url: str, timeout: int = 45) -> bytes | None:
+    """사용자가 붙여넣은 상품 사진 URL에서 실제 이미지를 받아옵니다."""
+    url = (url or "").strip()
+    if not re.match(r"^https?://", url, re.I):
+        return None
+    try:
+        data = _http_get(url, timeout=timeout)
+        return data if _is_image(data) else None
+    except Exception as e:  # noqa: BLE001
+        log(f"  상품 이미지 다운로드 실패: {e}")
+        return None
+
+
+def product_frame(data: bytes, dest: Path, fit: str = "blur") -> str | None:
+    """상품 사진을 9:16 한 장으로 합성합니다.
+    기본(fit=blur): 같은 사진을 어둡게 블러한 배경 + 가운데 선명한 상품(정방형도 안 잘림).
+    fit=fill: 화면을 꽉 채우고 Ken Burns 로 움직입니다."""
+    import io
+
+    from PIL import Image, ImageDraw, ImageEnhance, ImageFilter
+
+    try:
+        im = Image.open(io.BytesIO(data)).convert("RGB")
+    except Exception:
+        return None
+    w, h = im.size
+    if min(w, h) < 200:
+        return None
+
+    def cover(src, tw, th):
+        sc = max(tw / src.size[0], th / src.size[1])
+        r = src.resize((int(src.size[0] * sc) + 1, int(src.size[1] * sc) + 1), Image.LANCZOS)
+        x0 = (r.size[0] - tw) // 2
+        y0 = (r.size[1] - th) // 2
+        return r.crop((x0, y0, x0 + tw, y0 + th))
+
+    out = None
+    if fit == "fill":
+        out = cover(im, W, H)
+    else:
+        bg = cover(im, W, H).filter(ImageFilter.GaussianBlur(44))
+        bg = ImageEnhance.Brightness(bg).enhance(0.42)
+        bg = ImageEnhance.Color(bg).enhance(0.85)
+        canvas = bg.convert("RGBA")
+
+        max_w, max_h = int(W * 0.90), int(H * 0.42)
+        sc = min(max_w / w, max_h / h)
+        fw, fh = max(1, int(w * sc)), max(1, int(h * sc))
+        top = 1200 - fh
+        x = (W - fw) // 2
+
+        # 부드러운 그림자
+        radius = max(10, int(min(fw, fh) * 0.05))
+        shadow = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+        ImageDraw.Draw(shadow).rounded_rectangle(
+            [x - 16, top + 22, x + fw + 16, top + fh + 30], radius=radius + 18, fill=(0, 0, 0, 165)
+        )
+        canvas = Image.alpha_composite(canvas, shadow.filter(ImageFilter.GaussianBlur(30)))
+
+        fg = im.resize((fw, fh), Image.LANCZOS).convert("RGBA")
+        mask = Image.new("L", (fw, fh), 0)
+        ImageDraw.Draw(mask).rounded_rectangle([0, 0, fw - 1, fh - 1], radius=radius, fill=255)
+        fg.putalpha(mask)
+        canvas.alpha_composite(fg, (x, top))
+        out = canvas.convert("RGB")
+
+    p = dest.with_suffix(".product.jpg")
+    out.save(p, quality=94, subsampling=1)
+    return str(p)
+
+
 def picsum_visual(dest: Path, seed: int) -> tuple[str, str] | None:
     """Picsum — 검색과 무관하지만 '진짜 사진'은 보장되는 마지막 사진 폴백."""
     try:
@@ -592,7 +663,8 @@ def gradient_visual(query: str, dest: Path, seed: int, word: str = "") -> str:
 
 
 def fetch_visual(query: str, index: int, work: Path, pexels_key: str = "",
-                 word: str = "") -> tuple[str, str]:
+                 word: str = "", image_url: str = "",
+                 image_fit: str = "blur") -> tuple[str, str]:
     """컷별 배경. (경로, 소스이름) — 503이 나도 사진이 들어가고, 절대 실패하지 않습니다."""
     query = (query or "").strip() or "calm cinematic korean city night"
     seed = int(hashlib.sha256(f"{query}-{index}".encode()).hexdigest()[:8], 16) % 2147483647
@@ -616,6 +688,14 @@ def fetch_visual(query: str, index: int, work: Path, pexels_key: str = "",
         except Exception:
             pass
         return path, name
+
+    # 사용자가 붙여넣은 실제 상품 사진이 있으면 무조건 최우선
+    if image_url:
+        data = download_image(image_url)
+        if data:
+            path = product_frame(data, dest, "fill" if image_fit == "fill" else "blur")
+            if path:
+                return done(path, "product-fill" if image_fit == "fill" else "product")
 
     if pexels_key:
         got = pexels_visual(query, pexels_key, dest, seed)
@@ -932,12 +1012,13 @@ MOTION_MODES = [("in", 1.30), ("pan_r", 1.28), ("out", 1.34), ("pan_l", 1.26),
                 ("in", 1.36), ("pan_up", 1.30)]
 
 
-def ken_burns_filter(mode: str, frames: int, dur: float) -> str:
+def ken_burns_filter(mode: str, frames: int, dur: float, base: float = 1.24,
+                     delta: float | None = None) -> str:
     """정지 이미지에 컷마다 다른 줌/팬 모션. 짧은 컷은 속도를 살짝 낮춥니다."""
     frames = max(frames, 2)
     d = frames - 1
-    base = 1.24
-    delta = 0.09 + 0.06 * min(dur, 4.0) / 4.0   # 2.5초 컷 ≈ 13%, 4초 컷 ≈ 15%
+    if delta is None:
+        delta = 0.09 + 0.06 * min(dur, 4.0) / 4.0   # 2.5초 컷 ≈ 13%, 4초 컷 ≈ 15%
     z_in = f"1+{(base - 1 + delta):.4f}*on/{d}"
     z_out = f"{base + delta:.4f}-{delta:.4f}*on/{d}"
     cx = "iw/2-(iw/zoom/2)"
@@ -1007,8 +1088,12 @@ def render_cut(
               f"fps={FPS},eq=saturation=1.05:contrast=1.03,setsar=1")
     else:
         frames = int(math.ceil(dur * FPS)) + 2
-        mode, _z = MOTION_MODES[idx % len(MOTION_MODES)]
-        bg = ken_burns_filter(mode, frames, dur)
+        if visual_kind == "product":
+            # 상품이 잘리지 않도록 아주 느린 줌만
+            bg = ken_burns_filter("in", frames, dur, base=1.0, delta=0.035)
+        else:
+            mode, _z = MOTION_MODES[idx % len(MOTION_MODES)]
+            bg = ken_burns_filter(mode, frames, dur)
 
     filt = [f"[0:v]{bg}[bg]"]
     prev, n = "bg", 1
@@ -1197,6 +1282,8 @@ def main() -> int:
         visual, kind = fetch_visual(
             cut.get("visual_query", ""), i, work, pexels_key,
             word=next((w for w in word_src if w), ""),
+            image_url=(cut.get("image_url") or "").strip(),
+            image_fit=(cut.get("image_fit") or "blur").strip().lower(),
         )
         results.append(render_cut(
             index=i, total=len(cuts_in), visual=visual, visual_kind=kind,
