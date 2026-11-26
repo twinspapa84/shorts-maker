@@ -750,7 +750,6 @@ function updateStepNav(){
 }
 
 function goStep(n, stage, opts={}){
-  const prev = S.step;
   S.step = n; S.stage = stage ?? stageForStep(n);
   if(n===3 && previewIdx>0){ previewIdx = 0; }
   ['#card-topic','#card-script','#card-render','#card-result'].forEach((sel,i)=>{
@@ -788,7 +787,7 @@ window.addEventListener('popstate', e=>{
   const stage = (st && st.stage) || stageForStep(n);
   window.__navApplying = true;
   try{ goStep(n, stage, {noHistory:true}); } finally { window.__navApplying = false; }
-  toast('이전 단계로 돌아왔어요', 1400);
+  toast('단계를 이동했어요', 1400);
 });
 
 /* ══════════════════════════════════════════════════════════
