@@ -265,6 +265,23 @@
   .video-shell{background:#0b0d14; border-radius:18px; padding:10px; box-shadow:var(--shadow-lg); display:flex; justify-content:center}
   video{width:100%; max-width:400px; border-radius:12px; display:block; background:#000; max-height:64vh}
   .dl-row{display:flex; gap:10px; flex-wrap:wrap; margin-top:14px}
+  /* 저장 카드 · 최근 영상 */
+  .save-card{margin-top:14px; padding:14px; border:1px solid var(--line); border-radius:14px; background:#fbfcff; display:grid; gap:10px}
+  .save-progress{display:grid; gap:6px}
+  .sp-bar{height:8px; background:#eceff7; border-radius:99px; overflow:hidden}
+  .sp-bar i{display:block; height:100%; width:0; background:linear-gradient(90deg,#4a68ff,#3b53ec); transition:width .3s}
+  .save-pct{font-size:12px; font-weight:800; color:var(--brand-2); text-align:center}
+  #saveHint .btn{margin-top:2px}
+  .rel-meta{display:flex; align-items:center; gap:7px; flex-wrap:wrap; font-size:12px; font-weight:800; color:var(--muted); margin:0 0 9px}
+  .rel-meta b{color:var(--ink-2); font-size:13px; letter-spacing:-.01em}
+  .recent-list{display:grid; gap:10px}
+  .rel{display:flex; align-items:center; gap:12px; width:100%; padding:10px; border:1px solid var(--line); border-radius:14px; background:#fff; cursor:pointer; text-align:left; font-family:inherit; color:var(--ink)}
+  .rel:hover{border-color:#cfd4e3; background:#fbfcff}
+  .rel img{width:44px; height:78px; object-fit:cover; border-radius:9px; background:#0b0d14; flex:none}
+  .rel .rel-t{flex:1; min-width:0; display:grid; gap:1px}
+  .rel .rel-t b{font-size:13.5px; letter-spacing:-.01em}
+  .rel .rel-t span{font-size:11.5px; color:var(--muted); font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .rel .rel-go{font-size:12px; font-weight:800; color:var(--brand-2); flex:none}
   .cap-grid{display:grid; gap:12px; margin-top:6px}
   .cap{border:1px solid var(--line); border-radius:14px; overflow:hidden}
   .cap-h{display:flex; align-items:center; justify-content:space-between; padding:10px 13px; background:#fafbfe; border-bottom:1px solid var(--line-2)}
@@ -361,6 +378,7 @@
   </div>
   <div class="spacer"></div>
   <span class="pill free" title="서버·크레딧 비용 없이 GitHub Actions 무료 한도로 렌더링합니다">₩0 무료</span>
+  <button class="icon-btn" id="btnRecent" title="최근 완성 영상을 다시 불러와 저장합니다"><span class="full">📂 최근 완성 영상</span><span class="short">📂 최근</span></button>
   <a class="icon-btn" id="btnDemo" style="text-decoration:none"><span class="full">▶ 예시 영상</span><span class="short">▶ 예시</span></a>
   <button class="icon-btn" id="btnHelp"><span class="full">설정 가이드</span><span class="short">가이드</span></button>
   <button class="icon-btn" id="btnSettings" aria-label="설정"><span class="full">⚙ 설정</span><span class="short">⚙</span></button>
@@ -521,15 +539,27 @@
       <h2>4. 완성 🎬</h2>
       <p class="sub">영상 확인 → 캡션 복사 → 그대로 업로드하세요.</p>
 
+      <div class="rel-meta" id="relMeta"></div>
       <div class="video-shell"><video id="player" controls playsinline preload="metadata"></video></div>
-      <div class="dl-row">
-        <a class="btn primary" id="btnDownload" style="flex:2 1 240px" target="_blank" rel="noopener">⬇ MP4 다운로드</a>
-        <a class="btn ghost" id="btnRelease" style="flex:1 1 160px" target="_blank" rel="noopener">Release 열기</a>
+
+      <div class="save-card">
+        <button class="btn primary block" id="btnSaveVideo" type="button">📲 아이폰 사진첩에 저장</button>
+        <div class="save-progress hidden" id="saveProgress">
+          <div class="sp-bar"><i id="saveBar"></i></div>
+          <div class="save-pct" id="savePct">영상 준비 중… 0%</div>
+        </div>
+        <div class="note warn hidden" id="saveHint"></div>
+        <div class="dl-row" style="margin-top:0">
+          <a class="btn ghost sm" id="btnDownload" style="flex:1 1 120px" download target="_blank" rel="noopener">⬇ 파일로 저장</a>
+          <a class="btn ghost sm" id="btnOpenSafari" style="flex:1 1 120px" target="_blank" rel="noopener">🌐 사파리에서 열기</a>
+          <a class="btn ghost sm" id="btnRelease" style="flex:1 1 120px" target="_blank" rel="noopener">🔗 릴리즈 페이지</a>
+        </div>
       </div>
       <div class="note" id="playerNote" style="margin-top:12px; display:none"></div>
 
       <h3 style="margin:24px 0 4px; font-size:15px">업로드용 캡션 <span class="badge on" style="margin-left:6px">1클릭 복사</span></h3>
       <p class="sub" style="margin-bottom:12px">플랫폼별로 톤을 다르게 만들었습니다.</p>
+      <div class="note warn hidden" id="capNote" style="margin:-4px 0 12px"></div>
       <div class="cap-grid" id="captionGrid"></div>
 
       <div class="row" style="margin-top:20px">
@@ -664,6 +694,21 @@
   </div>
 </div>
 
+<!-- 최근 완성 영상 모달 -->
+<div class="modal" id="recent">
+  <div class="sheet" style="max-width:520px">
+    <div class="sheet-h">
+      <h3>📂 최근 완성 영상</h3>
+      <button class="icon-btn" data-close="recent">닫기</button>
+    </div>
+    <div class="sheet-b" style="gap:12px">
+      <div class="hint" id="recentSub" style="margin:0">최근 릴리즈를 불러오는 중…</div>
+      <div class="recent-list" id="recentList"></div>
+      <div class="hint" style="margin:0">영상을 열면 4단계 완성 화면으로 바로 넘어가고, 거기서 사진첩에 저장할 수 있어요.</div>
+    </div>
+  </div>
+</div>
+
 <!-- 예시 영상 모달 -->
 <div class="modal" id="demo">
   <div class="sheet" style="max-width:420px">
@@ -695,6 +740,7 @@ const S = {
   topic:'', tone:'유머 썰', voice:'ko-KR-InJoonNeural', rate:'+12%', bgm:true,
   title:'', cuts:[], step:1, stage:1,
   run:null, // {id, url, number, status, conclusion}
+  viewing:null, // 4단계에 지금 열어 둔 영상 {tag, url, assetId, size, releaseUrl, thumb, at}
   history:[]
 };
 
@@ -1829,28 +1875,279 @@ async function onRenderDone(run){
   const tag = `render-${run.run_number}`;
   let url = `https://github.com/${repo()}/releases/download/${tag}/shorts_final.mp4`;
   let releaseUrl = `https://github.com/${repo()}/releases/tag/${tag}`;
+  let asset = null;
+  let thumb = '';
   try{
     const rel = await gh(`/repos/${repo()}/releases/tags/${tag}`);
-    const asset = (rel.assets||[]).find(a=>a.name==='shorts_final.mp4');
+    const assets = rel.assets || [];
+    asset = assets.find(a=>a.name==='shorts_final.mp4') || null;
+    const t = assets.find(a=>a.name==='thumbnail.jpg');
+    if(t) thumb = t.browser_download_url;
     if(asset){ url = asset.browser_download_url; releaseUrl = rel.html_url; }
   }catch(e){}
 
-  $('#player').src = url;
-  $('#btnDownload').href = url;
-  $('#btnRelease').href = releaseUrl;
-  $('#playerNote').style.display='block';
-  $('#playerNote').className='note';
-  $('#playerNote').innerHTML = '영상이 안 보이면 <b>MP4 다운로드</b>를 눌러 사진 앱에 저장하세요. (아이폰 사파리: 길게 눌러 저장)';
+  showVideo({
+    tag, title: S.title || tag, url, assetId: asset? asset.id : null, size: asset? asset.size : null,
+    releaseUrl, thumb, at: new Date().toISOString()
+  });
 
-  S.history = [{url, releaseUrl, at:new Date().toISOString(), title:S.title}, ...S.history].slice(0,10);
+  S.history = [{tag, url, releaseUrl, assetId: asset? asset.id : null, thumb, at:new Date().toISOString(), title:S.title}, ...S.history].slice(0,10);
   save();
 
   await buildCaptions();
   $('#phoneRendering').classList.add('hidden');
   setRenderingUI(false);
   goStep(4, 4);
-  toast('영상 완성! 바로 다운로드할 수 있어요', 3500);
+  toast('영상 완성! 📲 버튼으로 사진첩에 저장하세요', 4000);
 }
+
+/* ══════════════════════════════════════════════════════════
+   영상 저장 · 최근 완성 영상 다시 불러오기
+   ──────────────────────────────────────────────────────────
+   · 아이폰: 릴리즈 MP4를 받아(진행률 표시) navigator.share(files)로
+     공유 시트를 띄웁니다. 공유 시트에서 ‘비디오 저장’만 누르면 사진첩.
+   · fetch가 막히면(CORS·구형 iOS) 영상 열기 버튼으로 안내합니다.
+   · 상단 📂 최근 완성 영상: 최신 릴리즈 3건을 바로 4단계로 엽니다.
+   ══════════════════════════════════════════════════════════ */
+function fmtSize(n){
+  if(!n) return '';
+  const mb = n/1048576;
+  return mb >= 1 ? `${mb.toFixed(1)}MB` : `${Math.max(1, Math.round(n/1024))}KB`;
+}
+function fmtDate(iso){
+  if(!iso) return '';
+  const d = new Date(iso);
+  if(isNaN(d.getTime())) return '';
+  return `${d.getFullYear()}. ${d.getMonth()+1}. ${d.getDate()}.`;
+}
+function isIos(){
+  return /iphone|ipad|ipod/i.test(navigator.userAgent || '')
+    || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+}
+function fileShareSupported(){
+  try{
+    if(!navigator.share || !navigator.canShare) return false;
+    const probe = new File([new Uint8Array([0])], 'probe.mp4', {type:'video/mp4'});
+    return !!navigator.canShare({files:[probe]});
+  }catch(e){ return false; }
+}
+function saveLabel(){
+  if(fileShareSupported()) return isIos() ? '📲 아이폰 사진첩에 저장' : '📲 공유 시트로 저장';
+  return isIos() ? '⬇ 영상 저장 (파일 앱)' : '⬇ 영상 저장';
+}
+
+function setSaveProgress(p, label){
+  const pct = Math.max(0, Math.min(1, p));
+  $('#saveProgress').classList.remove('hidden');
+  $('#saveHint').classList.add('hidden');
+  $('#saveBar').style.width = `${Math.round(pct*100)}%`;
+  $('#savePct').textContent = label || `영상 준비 중… ${Math.round(pct*100)}%`;
+}
+function hideSaveProgress(){
+  $('#saveProgress').classList.add('hidden');
+  $('#saveBar').style.width = '0%';
+}
+
+/* MP4를 받아 오면서 진행률을 알립니다. CORS가 막히면 TypeError로 떨어집니다. */
+async function fetchMp4(url, onProgress){
+  const ctrl = new AbortController();
+  const timer = setTimeout(()=>ctrl.abort(), 60000);
+  try{
+    const res = await fetch(url, {mode:'cors', cache:'no-store', signal:ctrl.signal});
+    if(!res.ok) throw new Error(`HTTP ${res.status}`);
+    const total = Number(res.headers.get('content-length') || 0);
+    if(!res.body || !total || typeof res.body.getReader !== 'function'){
+      const blob = await res.blob();
+      onProgress(1);
+      return blob;
+    }
+    const reader = res.body.getReader();
+    const chunks = [];
+    let got = 0;
+    for(;;){
+      const {done, value} = await reader.read();
+      if(done) break;
+      chunks.push(value); got += value.length;
+      onProgress(Math.min(0.99, got/total));
+    }
+    return new Blob(chunks, {type:'video/mp4'});
+  }catch(e){
+    if(e && e.name === 'AbortError'){
+      const err = new Error('시간이 너무 오래 걸려 멈췄어요');
+      err.name = 'TimeoutError';
+      throw err;
+    }
+    throw e;
+  }finally{ clearTimeout(timer); }
+}
+
+/* 바로 저장이 막힌 경우: 영상 열기 버튼 + 한 줄 안내 */
+function showSaveFallback(v){
+  const hint = $('#saveHint');
+  hint.classList.remove('hidden');
+  hint.innerHTML = '<b>웹앱에서는 사진첩 저장이 막혀 있어요.</b><br>'
+    + '아래 <b>영상 열기</b>를 누르면 재생 화면이 열립니다. 거기서 하단 <b>공유(□↑) → ‘비디오 저장’</b>을 누르면 사진첩에 들어가요.'
+    + `<div style="margin-top:10px"><a class="btn primary sm" href="${esc(v.url)}" target="_blank" rel="noopener">▶ 영상 열기</a></div>`;
+}
+
+async function saveVideo(){
+  const v = S.viewing;
+  if(!v || !v.url){ toast('영상을 먼저 불러와 주세요'); return; }
+  if($('#btnSaveVideo').disabled) return;
+  const filename = `shorts_${v.tag || 'final'}.mp4`;
+
+  // 공유 시트(파일)를 못 쓰는 브라우저: 바로 내려받기
+  if(!fileShareSupported()){
+    const a = document.createElement('a');
+    a.href = v.url; a.download = filename; a.rel = 'noopener';
+    document.body.appendChild(a); a.click(); a.remove();
+    toast('영상을 내려받는 중이에요', 3000);
+    return;
+  }
+
+  const btn = $('#btnSaveVideo');
+  btn.disabled = true;
+  const oldLabel = btn.textContent;
+  btn.textContent = '영상 준비 중…';
+  setSaveProgress(0, '영상 준비 중… 0%');
+  try{
+    const blob = await fetchMp4(v.url, p=>setSaveProgress(p, `영상 준비 중… ${Math.round(p*100)}%`));
+    setSaveProgress(1, '공유 창을 여는 중…');
+    const file = new File([blob], filename, {type:'video/mp4'});
+    if(!navigator.canShare({files:[file]})) throw new Error('CANNOT_SHARE_FILE');
+    await navigator.share({files:[file], title: v.title || '쇼츠 영상'});
+    hideSaveProgress();
+    toast('공유 시트에서 ‘비디오 저장’을 누르면 사진첩에 들어가요', 5000);
+  }catch(e){
+    hideSaveProgress();
+    if(e && e.name === 'AbortError'){
+      toast('저장을 취소했어요');
+    }else{
+      showSaveFallback(v);
+      toast('영상이 열리면 공유(□↑) → 비디오 저장을 눌러 주세요', 5000);
+    }
+  }finally{
+    btn.disabled = false;
+    btn.textContent = oldLabel || saveLabel();
+  }
+}
+
+/* 4단계 완성 화면에 영상 하나를 올립니다(방금 렌더 · 과거 릴리즈 공용) */
+function showVideo(v){
+  if(!v || !v.url) return;
+  S.viewing = v;
+  const p = $('#player');
+  p.src = v.url;
+  if(v.thumb) p.poster = v.thumb; else p.removeAttribute('poster');
+  p.onerror = ()=>{
+    const n = $('#playerNote');
+    n.style.display = 'block';
+    n.className = 'note warn';
+    n.innerHTML = '영상을 불러오지 못했어요. <b>&#127760; 사파리에서 열기</b>를 눌러 주세요. (아이폰: 재생 화면 하단 공유 → 비디오 저장)';
+  };
+  $('#btnDownload').href = v.url;
+  $('#btnDownload').setAttribute('download', `shorts_${v.tag || 'final'}.mp4`);
+  $('#btnOpenSafari').href = v.url;
+  $('#btnRelease').href = v.releaseUrl || v.url;
+
+  const isCurrent = !!(S.run && S.run.number && v.tag === `render-${S.run.number}`);
+  $('#relMeta').innerHTML = `<b>${esc(v.tag || '영상')}</b>`
+    + (v.at ? `<span>${esc(fmtDate(v.at))}</span>` : '')
+    + (v.size ? `<span>· ${esc(fmtSize(v.size))}</span>` : '')
+    + (isCurrent ? '<span class="badge on">이번 렌더</span>' : '<span class="badge">이전 영상</span>');
+
+  $('#saveHint').classList.add('hidden');
+  $('#saveHint').innerHTML = '';
+  hideSaveProgress();
+  $('#btnSaveVideo').disabled = false;
+  $('#btnSaveVideo').textContent = saveLabel();
+  $('#playerNote').style.display = 'none';
+
+  const capNote = $('#capNote');
+  if(isCurrent){
+    capNote.classList.add('hidden');
+  }else{
+    capNote.classList.remove('hidden');
+    capNote.innerHTML = '이 영상은 이전에 만든 결과예요. 아래 캡션은 지금 대본 기준이라 영상과 다를 수 있습니다.';
+  }
+  save();
+}
+
+/* ── 최근 완성 영상 ─────────────────────────────────────── */
+let recentCache = [];
+function relCardHTML(r, i){
+  const assets = r.assets || [];
+  const mp4 = assets.find(a=>a.name==='shorts_final.mp4');
+  const thumb = assets.find(a=>a.name==='thumbnail.jpg');
+  const meta = [fmtDate(r.published_at), fmtSize(mp4 && mp4.size)].filter(Boolean).join(' · ');
+  const pic = thumb ? `<img src="${esc(thumb.browser_download_url)}" alt="" loading="lazy">` : '<img alt="">';
+  return `<button type="button" class="rel" data-i="${i}">${pic}`
+    + `<span class="rel-t"><b>${esc(r.tag_name)}</b><span>${esc(r.name || '쇼츠 렌더')}</span><span>${esc(meta)}</span></span>`
+    + '<span class="rel-go">열기 ›</span></button>';
+}
+
+function openRelease(rel){
+  const assets = rel.assets || [];
+  const mp4 = assets.find(a=>a.name==='shorts_final.mp4');
+  if(!mp4){ toast('이 릴리즈에는 영상이 없어요'); return; }
+  const thumb = assets.find(a=>a.name==='thumbnail.jpg');
+  closeModal('recent');
+  showVideo({
+    tag: rel.tag_name, title: rel.name || rel.tag_name, url: mp4.browser_download_url,
+    assetId: mp4.id, size: mp4.size, releaseUrl: rel.html_url,
+    thumb: thumb ? thumb.browser_download_url : '', at: rel.published_at
+  });
+  goStep(4, 4);
+  toast(`${rel.tag_name} 영상을 열었어요`);
+}
+
+function openLocalVideo(h){
+  const tagged = /\/download\/([^/]+)\//.exec(h.url || '');
+  closeModal('recent');
+  showVideo({
+    tag: h.tag || (tagged ? tagged[1] : '최근 영상'), title: h.title || '쇼츠 영상',
+    url: h.url, assetId: h.assetId || null, size: null, releaseUrl: h.releaseUrl || h.url,
+    thumb: h.thumb || '', at: h.at
+  });
+  goStep(4, 4);
+  toast('최근 영상을 열었어요');
+}
+
+async function openRecent(){
+  openModal('recent');
+  const list = $('#recentList');
+  const sub = $('#recentSub');
+  list.innerHTML = '';
+  sub.textContent = '최근 릴리즈를 불러오는 중…';
+  try{
+    const rels = await gh(`/repos/${repo()}/releases?per_page=3`);
+    recentCache = (Array.isArray(rels) ? rels : []).filter(r=>(r.assets||[]).some(a=>a.name==='shorts_final.mp4'));
+    if(!recentCache.length){
+      sub.textContent = '아직 완성된 영상이 없어요. 3단계에서 렌더링을 시작해 보세요.';
+      return;
+    }
+    sub.textContent = `최근 ${recentCache.length}건 · 누르면 4단계 완성 화면으로 열립니다`;
+    list.innerHTML = recentCache.map(relCardHTML).join('');
+    $$('#recentList .rel').forEach(el=>{ el.onclick = ()=>openRelease(recentCache[Number(el.dataset.i)]); });
+  }catch(e){
+    const local = (S.history || []).filter(h=>h && h.url).slice(0,3);
+    if(local.length){
+      sub.textContent = 'GitHub에 연결하지 못해, 이 브라우저에 남아 있는 최근 기록으로 보여드려요.';
+      list.innerHTML = local.map((h,i)=>`<button type="button" class="rel" data-i="${i}">`
+        + `<span class="rel-t"><b>${esc(h.tag || '최근 영상')}</b><span>${esc(h.title || '쇼츠 영상')}</span><span>${esc(fmtDate(h.at))}</span></span>`
+        + '<span class="rel-go">열기 ›</span></button>').join('');
+      $$('#recentList .rel').forEach(el=>{ el.onclick = ()=>openLocalVideo(local[Number(el.dataset.i)]); });
+    }else{
+      sub.textContent = '';
+      list.innerHTML = `<div class="note warn">불러오지 못했어요: ${esc(e.message || '네트워크 오류')}<br>`
+        + `<a href="https://github.com/${esc(repo())}/releases" target="_blank" rel="noopener">GitHub에서 직접 보기 →</a><br>`
+        + '⚙ 설정에서 GitHub 토큰·저장소를 확인해 주세요.</div>';
+    }
+  }
+}
+
+$('#btnRecent').onclick = openRecent;
+$('#btnSaveVideo').onclick = saveVideo;
 
 /* ══════════════════════════════════════════════════════════
    캡션
@@ -2056,7 +2353,11 @@ function init(){
   $$('#toneChips .chip').forEach(b=>b.setAttribute('aria-pressed', String(b.dataset.tone===S.tone)));
   $$('#voiceChips .chip').forEach(b=>b.setAttribute('aria-pressed', String(b.dataset.voice===S.voice)));
   renderCuts(); renderPreview(); refreshKeyState(); refreshLinks();
-  const startStep = (S.cuts.length && S.step>=2) ? Math.min(S.step,3) : 1;
+  // 앱을 나갔다 와도 보던 완성 영상(4단계)은 그대로 이어서 열립니다
+  let startStep = 1;
+  if(S.step >= 4 && S.viewing && S.viewing.url) startStep = 4;
+  else if(S.cuts.length && S.step >= 2) startStep = Math.min(S.step, 3);
+  if(startStep === 4) showVideo(S.viewing);
   try{ history.replaceState({shortsStep:startStep, stage:stageForStep(startStep)}, ''); }catch(e){}
   goStep(startStep, stageForStep(startStep));
 
