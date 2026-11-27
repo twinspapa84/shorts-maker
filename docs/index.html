@@ -1430,8 +1430,9 @@ function jsonToState(text){
   if(typeof meta.title === 'string' && meta.title.trim()) out.title = meta.title.trim();
   if(typeof meta.tone === 'string' && meta.tone.trim()) out.tone = meta.tone.trim();
   if(typeof meta.voice === 'string' && meta.voice.trim()) out.voice = meta.voice.trim();
-  if(typeof meta.rate === 'string' && meta.rate.trim()) out.rate = meta.rate.trim();
-  if(typeof meta.bgm === 'boolean') out.bgm = meta.bgm;
+  /* 속도·BGM은 payload 기준으로 맞춤 (빠지면 기본값) — 이전 import 값이 남지 않게 */
+  out.rate = (typeof meta.rate === 'string' && meta.rate.trim()) ? meta.rate.trim() : '+12%';
+  out.bgm = (typeof meta.bgm === 'boolean') ? meta.bgm : true;
   return out;
 }
 /* == JSON-FILL-PURE-END == */
