@@ -63,6 +63,17 @@ GitHub 앱 권한으로는 `.github/workflows/`에 파일을 올릴 수 없어�
 3. **렌더링 시작** — GitHub Actions가 영상을 만들고, 끝나면 **Release에 MP4**가 올라옵니다.
    - 스튜디오에 영상 플레이어 · 다운로드 버튼 · **인스타/유튜브/틱톡 캡션**(1클릭 복사)이 자동으로 나옵니다.
 
+### 대본이 이미 있으면: 📋 JSON 한 번에 채우기
+
+외부(채팅·메모·다른 AI)에서 받은 **payload JSON**을 그대로 넣으면 제목·톤·목소리·속도·BGM과 컷(나레이션·자막·비주얼·상품 이미지)이 한 번에 채워집니다. 1단계·2단계 화면의 **📋 JSON 한 번에 채우기** 버튼 → **클립보드에서 바로 붙여넣기**(권한이 막히면 칸에 길게 눌러 붙여넣고 **적용하기**) → 바로 2단계 대본 화면으로 이동합니다.
+
+```json
+{ "title": "제목", "tone": "쇼핑/리뷰 후킹", "voice": "ko-KR-InJoonNeural", "rate": "+12%", "bgm": true,
+  "cuts": [ { "narration": "**7천원대** 수세미 하나면 끝", "subtitle": "7천원대 수세미 하나면", "visual_query": "scouring pad", "image_url": "https://…jpg", "image_fit": "blur" } ] }
+```
+
+```` ```json ```` 코드블록 표시는 자동으로 벗겨내고, `subtitle`이 빠진 컷은 나레이션에서 `**`를 뺀 앞부분으로 채웁니다.
+
 ### 선택: Pexels 무료 키 (화질 업)
 
 [pexels.com/api](https://www.pexels.com/api/)에서 무료 키를 받아
