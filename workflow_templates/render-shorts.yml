@@ -16,6 +16,21 @@ on:
         description: "렌더 설정 JSON (웹 스튜디오가 자동으로 채웁니다)"
         required: true
         type: string
+      voice:
+        description: "목소리 덮어쓰기 (비우면 payload 값) — ko-KR-InJoonNeural / ko-KR-HyunsuMultilingualNeural / ko-KR-SunHiNeural"
+        required: false
+        type: string
+        default: ""
+      rate:
+        description: "말하기 속도 덮어쓰기 (비우면 payload 값) — +0% / +12% / +20%"
+        required: false
+        type: string
+        default: ""
+      template:
+        description: "템플릿 덮어쓰기 (비우면 payload 값) — default / community"
+        required: false
+        type: string
+        default: ""
 
 permissions:
   contents: write
@@ -51,12 +66,26 @@ jobs:
       - name: 5) 입력값 저장
         env:
           PAYLOAD_JSON: ${{ inputs.payload_json }}
+          OVR_VOICE: ${{ inputs.voice }}
+          OVR_RATE: ${{ inputs.rate }}
+          OVR_TEMPLATE: ${{ inputs.template }}
         run: |
           python - <<'PY'
-          import os, pathlib
+          import json, os, pathlib
           raw = os.environ.get("PAYLOAD_JSON", "")
-          pathlib.Path("payload.json").write_text(raw, encoding="utf-8")
-          print("payload 길이:", len(raw))
+          try:
+              payload = json.loads(raw) if raw.strip() else {}
+          except Exception:
+              payload = {}
+          # 직접 실행할 때 위 입력칸에 적은 값이 payload 를 덮어씁니다
+          for key in ("voice", "rate", "template"):
+              v = (os.environ.get("OVR_" + key.upper()) or "").strip()
+              if v and isinstance(payload, dict):
+                  payload[key] = v
+          pathlib.Path("payload.json").write_text(
+              json.dumps(payload, ensure_ascii=False) if payload else raw, encoding="utf-8")
+          print("payload 길이:", len(raw), "| 목소리:", payload.get("voice"),
+                "| 템플릿:", payload.get("template", "default"))
           PY
 
       - name: 6) 쇼츠 렌더링

@@ -234,6 +234,17 @@
     word-break:keep-all;
   }
   .phone .sub .hl{color:#FFD400; font-style:normal}
+  /* 커뮤니티 썰 미리보기 */
+  .phone .cm-head, .phone .cm-title, .phone .cm-meta{display:none}
+  .phone.community{background:#fff}
+  .phone.community .bg, .phone.community .scrim, .phone.community .hook, .phone.community .prog{display:none}
+  .phone.community .cm-head{display:grid; place-items:center; position:absolute; top:0; left:0; right:0; height:10%; background:#BDE2F8; border-bottom:1px solid #A9D2EC}
+  .phone.community .cm-head b{font-size:13px; font-weight:900; letter-spacing:-.01em; color:#121212}
+  .phone.community .cm-title{display:block; position:absolute; top:14%; left:5%; right:5%; text-align:center; font-weight:900; font-size:15px; line-height:1.26; color:#121212; word-break:keep-all}
+  .phone.community .cm-meta{display:block; position:absolute; top:30%; left:7%; right:7%; font-size:8px; font-weight:800; color:#6b7078; padding-bottom:7px; border-bottom:1px solid #E4E6EA}
+  .phone.community .sub{top:40%; bottom:auto; left:6%; right:6%; color:#121212; font-size:15px; font-weight:900; text-shadow:none; line-height:1.34}
+  .phone.community .sub .hl{background:#FFE85C; color:#121212; font-style:normal; border-radius:3px; padding:0 2px}
+  .phone.community .empty-hint{color:#8d96ad}
   .phone .empty-hint{position:absolute; inset:0; display:grid; place-items:center; color:#5d667e; font-size:12px; font-weight:700; text-align:center; padding:20px}
   .phone .rendering{position:absolute; inset:0; display:grid; place-items:center; background:rgba(6,8,14,.72); backdrop-filter:blur(2px)}
   .ring{width:74px; height:74px; border-radius:50%; border:3px solid rgba(255,255,255,.16); border-top-color:var(--amber); animation:spin 1s linear infinite; margin:0 auto 12px}
@@ -416,7 +427,7 @@
       <p class="sub">AI가 5~6컷 쇼츠 대본을 만들어 드립니다. 마음에 안 들면 직접 고쳐도 됩니다.</p>
 
       <div class="jsonbar">
-        <div class="jb-txt"><b>이미 만든 대본이 있나요?</b>JSON을 붙여넣으면 제목·톤·목소리·컷·상품 이미지가 한 번에 채워집니다.</div>
+        <div class="jb-txt"><b>이미 만든 대본이 있나요?</b>JSON을 붙여넣으면 템플릿·게시판명·제목·톤·목소리·컷·상품 이미지가 한 번에 채워집니다.</div>
         <button class="btn ghost sm json-open" type="button">📋 JSON 한 번에 채우기</button>
       </div>
 
@@ -434,8 +445,21 @@
           <span class="em">예시</span>창문 틈 바람 후기</button>
       </div>
 
-      <div style="margin-top:18px" class="row">
-        <div>
+      <div style="margin-top:18px">
+        <label class="f">템플릿</label>
+        <div class="chips" id="templateChips">
+          <button class="chip" data-template="default" aria-pressed="true"><span class="em">🎬</span>기본 쇼츠</button>
+          <button class="chip" data-template="community" aria-pressed="false"><span class="em">🩵</span>커뮤니티 썰</button>
+        </div>
+        <div id="boardNameWrap" class="hidden" style="margin-top:10px; max-width:340px">
+          <label class="f" for="boardName">게시판명</label>
+          <input type="text" id="boardName" maxlength="16" placeholder="기본: 썰랄라" />
+          <div class="hint">하늘색 헤더에 들어갈 이름입니다. 시간·댓글 수는 넣지 않으면 자동으로 채워집니다.</div>
+        </div>
+      </div>
+
+      <div style="margin-top:16px" class="row">
+        <div style="flex:1 1 260px">
           <label class="f">톤</label>
           <div class="chips" id="toneChips">
             <button class="chip" data-tone="유머 썰" aria-pressed="true"><span class="em">😅</span>유머 썰</button>
@@ -444,12 +468,26 @@
             <button class="chip" data-tone="쇼핑/리뷰 후킹" aria-pressed="false"><span class="em">🛒</span>쇼핑/리뷰 후킹</button>
           </div>
         </div>
-        <div>
-          <label class="f">목소리</label>
-          <div class="chips" id="voiceChips">
-            <button class="chip" data-voice="ko-KR-InJoonNeural" aria-pressed="true"><span class="em">🧑</span>남성 (인준)</button>
-            <button class="chip" data-voice="ko-KR-SunHiNeural" aria-pressed="false"><span class="em">👩</span>여성 (선히)</button>
-          </div>
+      </div>
+
+      <div style="margin-top:16px" class="row">
+        <div style="flex:2 1 300px">
+          <label class="f" for="voiceSelect">목소리</label>
+          <select id="voiceSelect">
+            <option value="ko-KR-InJoonNeural">🧑 남성 · 인준 — 차분하고 친근한 기본 톤</option>
+            <option value="ko-KR-HyunsuMultilingualNeural">🧑 남성 · 현수 — 밝고 또렷한 톤</option>
+            <option value="ko-KR-SunHiNeural">👩 여성 · 선히 — 부드럽고 밝은 톤</option>
+          </select>
+          <div class="hint">지금 실제로 동작하는 한국어 목소리 3종입니다(edge-tts).</div>
+        </div>
+        <div style="flex:1 1 150px">
+          <label class="f" for="rateSelect">말하기 속도</label>
+          <select id="rateSelect">
+            <option value="+0%">+0% · 천천히</option>
+            <option value="+12%">+12% · 기본</option>
+            <option value="+20%">+20% · 빠르게</option>
+            <option value="+30%">+30% · 아주 빠르게</option>
+          </select>
         </div>
       </div>
 
@@ -504,6 +542,7 @@
       <p class="sub">GitHub Actions에서 실제 MP4를 만듭니다. 보통 2~5분 걸리고, 창을 닫아도 계속 진행됩니다.</p>
 
       <div class="kv"><span>해상도 / 프레임</span><b>1080×1920 · 30fps</b></div>
+      <div class="kv"><span>템플릿</span><b id="sumTemplate">🎬 기본 쇼츠</b></div>
       <div class="kv"><span>컷 수 / 예상 길이</span><b id="sumCuts">-</b></div>
       <div class="kv"><span>목소리 / 속도</span><b id="sumVoice">-</b></div>
       <div class="kv"><span>비주얼 소스</span><b id="sumVisual">Pexels → AI 이미지 → 무료 사진 → 그라데이션</b></div>
@@ -577,6 +616,9 @@
         <div class="bg"></div>
         <div class="scrim"></div>
         <div class="prog" id="phoneProg"></div>
+        <div class="cm-head" id="phoneCmHead"><b id="phoneBoard">썰랄라</b></div>
+        <div class="cm-title" id="phoneCmTitle"></div>
+        <div class="cm-meta" id="phoneCmMeta">익명 · 11:15 · 댓글 99</div>
         <div class="hook" id="phoneHook">주제를 입력하면 여기에 훅 제목이 나옵니다</div>
         <div class="sub" id="phoneSub">자막 미리보기</div>
         <div class="empty-hint" id="phoneEmpty" style="display:none"></div>
@@ -683,11 +725,11 @@
     </div>
     <div class="sheet-b">
       <div class="note">
-        <b>render_shorts.py</b>가 받는 payload JSON을 그대로 넣으면 됩니다. 제목·톤·목소리·속도·BGM과 컷(나레이션·자막·비주얼·상품 이미지)이 한 번에 채워지고, 바로 2단계 대본 화면으로 넘어갑니다. 앞뒤 <code>```json</code> 코드블록 표시가 있어도 자동으로 벗겨냅니다.
+        <b>render_shorts.py</b>가 받는 payload JSON을 그대로 넣으면 됩니다. 템플릿(<code>template</code>)·게시판명(<code>board_name</code>)·제목·톤·목소리·속도·BGM과 컷(나레이션·자막·비주얼·상품 이미지)이 한 번에 채워지고, 바로 2단계 대본 화면으로 넘어갑니다. <code>"template": "community"</code>를 넣으면 🩵 커뮤니티 썰 스킨으로 바뀝니다. 앞뒤 <code>```json</code> 코드블록 표시가 있어도 자동으로 벗겨냅니다.
       </div>
       <button class="btn primary block" type="button" id="jsonClip">📋 클립보드에서 바로 붙여넣기</button>
       <div class="hint" style="margin:-8px 0 0">안 되면(아이폰 홈화면 앱 등) 아래 칸을 <b>길게 눌러 붙여넣기</b> 한 뒤 <b>적용하기</b>를 누르세요.</div>
-      <textarea id="jsonText" placeholder='{&#10;  "title": "제목",&#10;  "tone": "쇼핑/리뷰 후킹",&#10;  "voice": "ko-KR-InJoonNeural",&#10;  "rate": "+12%",&#10;  "bgm": true,&#10;  "cuts": [&#10;    { "narration": "...", "subtitle": "...", "visual_query": "...", "image_url": "https://...", "image_fit": "blur" }&#10;  ]&#10;}' spellcheck="false" autocapitalize="off" autocomplete="off"></textarea>
+      <textarea id="jsonText" placeholder='{&#10;  "template": "community",&#10;  "board_name": "썰랄라",&#10;  "title": "제목",&#10;  "tone": "쇼핑/리뷰 후킹",&#10;  "voice": "ko-KR-InJoonNeural",&#10;  "rate": "+12%",&#10;  "bgm": true,&#10;  "cuts": [&#10;    { "narration": "...", "subtitle": "...", "visual_query": "...", "image_url": "https://...", "image_fit": "blur" }&#10;  ]&#10;}' spellcheck="false" autocapitalize="off" autocomplete="off"></textarea>
       <div class="note warn hidden" id="jsonErr"></div>
       <button class="btn primary block" type="button" id="jsonApply">적용하기</button>
     </div>
@@ -734,10 +776,20 @@
    ══════════════════════════════════════════════════════════ */
 const LS_KEY = 'shortsStudio.v2';
 const DEFAULT_REPO = 'twinspapa84/shorts-maker';
+/* edge-tts --list-voices 로 확인한 실제 한국어 목소리 (2026-11 확인) */
+const VOICES = [
+  {id:'ko-KR-InJoonNeural',             short:'남성 (인준)', label:'🧑 남성 · 인준 — 차분하고 친근한 기본 톤'},
+  {id:'ko-KR-HyunsuMultilingualNeural', short:'남성 (현수)', label:'🧑 남성 · 현수 — 밝고 또렷한 톤'},
+  {id:'ko-KR-SunHiNeural',              short:'여성 (선히)', label:'👩 여성 · 선히 — 부드럽고 밝은 톤'}
+];
+const RATES = ['+0%', '+12%', '+20%', '+30%'];
+const voiceShort = id => (VOICES.find(v=>v.id===id) || VOICES[0]).short;
+const DEFAULT_BOARD = '썰랄라';
 
 const S = {
   settings: { gemini:'', pat:'', pexels:'', repo: DEFAULT_REPO },
   topic:'', tone:'유머 썰', voice:'ko-KR-InJoonNeural', rate:'+12%', bgm:true,
+  template:'default', board:DEFAULT_BOARD, kicker:'', cmTime:'', cmComments:'',
   title:'', cuts:[], step:1, stage:1,
   run:null, // {id, url, number, status, conclusion}
   viewing:null, // 4단계에 지금 열어 둔 영상 {tag, url, assetId, size, releaseUrl, thumb, at}
@@ -903,6 +955,11 @@ function renderPreview(){
   const cuts = S.cuts.length ? S.cuts : [{subtitle:'자막 미리보기', narration:''}];
   previewIdx = Math.min(previewIdx, cuts.length-1);
   const cut = cuts[previewIdx];
+  const isCm = S.template === 'community';
+  $('#phone').classList.toggle('community', isCm);
+  $('#phoneBoard').textContent = (S.board || DEFAULT_BOARD);
+  $('#phoneCmTitle').textContent = S.title || '제목을 입력하면 여기에 나옵니다';
+  $('#phoneCmMeta').textContent = `익명 · ${S.cmTime || '11:15'} · 댓글 ${S.cmComments || 99}`;
   $('#phoneHook').textContent = S.title || '주제를 입력하면 여기에 훅 제목이 나옵니다';
   $('#phoneHook').style.opacity = S.title ? 1 : .55;
   $('#phoneSub').innerHTML = highlightHTML(cut.subtitle || cut.narration || '자막 미리보기');
@@ -997,10 +1054,30 @@ $$('#toneChips .chip').forEach(b=>b.onclick=()=>{
   $$('#toneChips .chip').forEach(x=>x.setAttribute('aria-pressed','false'));
   b.setAttribute('aria-pressed','true'); S.tone = b.dataset.tone; save();
 });
-$$('#voiceChips .chip').forEach(b=>b.onclick=()=>{
-  $$('#voiceChips .chip').forEach(x=>x.setAttribute('aria-pressed','false'));
-  b.setAttribute('aria-pressed','true'); S.voice = b.dataset.voice; save();
+
+/* 템플릿 · 목소리 · 속도 */
+function applyVoiceUI(){
+  const vs = $('#voiceSelect');
+  if(vs) vs.value = VOICES.some(v=>v.id===S.voice) ? S.voice : VOICES[0].id;
+  const rs = $('#rateSelect');
+  if(rs) rs.value = RATES.includes(S.rate) ? S.rate : '+12%';
+}
+function applyTemplateUI(){
+  const cur = S.template === 'community' ? 'community' : 'default';
+  $$('#templateChips .chip').forEach(b=>b.setAttribute('aria-pressed', String((b.dataset.template||'default') === cur)));
+  const wrap = $('#boardNameWrap');
+  if(wrap) wrap.classList.toggle('hidden', cur !== 'community');
+  const bn = $('#boardName');
+  if(bn) bn.value = S.board || DEFAULT_BOARD;
+  renderPreview();
+}
+$$('#templateChips .chip').forEach(b=>b.onclick=()=>{
+  S.template = b.dataset.template === 'community' ? 'community' : 'default';
+  applyTemplateUI(); save();
 });
+$('#boardName').addEventListener('input', e=>{ S.board = e.target.value; renderPreview(); save(); });
+$('#voiceSelect').addEventListener('change', e=>{ S.voice = e.target.value; save(); syncRenderSummary(); });
+$('#rateSelect').addEventListener('change', e=>{ S.rate = e.target.value; save(); syncRenderSummary(); });
 $$('.chip.ex').forEach(b=>b.onclick=()=>{
   $('#topic').value = b.dataset.ex; S.topic = b.dataset.ex; save();
   $('#topic').focus();
@@ -1475,7 +1552,23 @@ function jsonToState(text){
   const out = {cuts, filled};
   if(typeof meta.title === 'string' && meta.title.trim()) out.title = meta.title.trim();
   if(typeof meta.tone === 'string' && meta.tone.trim()) out.tone = meta.tone.trim();
-  if(typeof meta.voice === 'string' && meta.voice.trim()) out.voice = meta.voice.trim();
+  /* 템플릿: community(=썰·커뮤니티 스킨) 만 따로, 나머지는 기본 */
+  if(typeof meta.template === 'string' && meta.template.trim()){
+    const t = meta.template.trim().toLowerCase();
+    out.template = (t === 'community' || t === '썰' || t === 'sul') ? 'community' : 'default';
+  }
+  if(typeof meta.board_name === 'string' && meta.board_name.trim()) out.board = meta.board_name.trim();
+  if(typeof meta.kicker === 'string' && meta.kicker.trim()) out.kicker = meta.kicker.trim();
+  if(typeof meta.time === 'string' && meta.time.trim()) out.cmTime = meta.time.trim();
+  if(meta.comments !== undefined && meta.comments !== null && String(meta.comments).trim() !== ''){
+    out.cmComments = String(meta.comments).trim();
+  }
+  /* 목소리는 실제로 있는 ID 만 반영 (없는 ID는 기본 목소리로 되돌림) */
+  if(typeof meta.voice === 'string' && meta.voice.trim()){
+    const v = meta.voice.trim();
+    if(VOICES.some(x=>x.id===v)) out.voice = v;
+    else out.voiceUnknown = v;
+  }
   /* 속도·BGM은 payload 기준으로 맞춤 (빠지면 기본값) — 이전 import 값이 남지 않게 */
   out.rate = (typeof meta.rate === 'string' && meta.rate.trim()) ? meta.rate.trim() : '+12%';
   out.bgm = (typeof meta.bgm === 'boolean') ? meta.bgm : true;
@@ -1498,6 +1591,11 @@ function applyJsonPayload(text){
   if(!next.filled) throw new Error('나레이션·자막이 모두 비어 있어요');
   if(next.title) S.title = next.title;
   if(next.tone) S.tone = jsonToneValue(next.tone) || next.tone;
+  if(next.template) S.template = next.template;
+  if(next.board) S.board = next.board;
+  if(next.kicker !== undefined) S.kicker = next.kicker;
+  if(next.cmTime !== undefined) S.cmTime = next.cmTime;
+  if(next.cmComments !== undefined) S.cmComments = next.cmComments;
   if(next.voice) S.voice = next.voice;
   if(next.rate) S.rate = next.rate;
   if(typeof next.bgm === 'boolean') S.bgm = next.bgm;
@@ -1505,11 +1603,14 @@ function applyJsonPayload(text){
   previewIdx = 0;
   $('#hookTitle').value = S.title || '';
   $$('#toneChips .chip').forEach(b=>b.setAttribute('aria-pressed', String(b.dataset.tone === S.tone)));
-  $$('#voiceChips .chip').forEach(b=>b.setAttribute('aria-pressed', String(b.dataset.voice === S.voice)));
+  applyVoiceUI(); applyTemplateUI();
   renderCuts(); renderPreview(); save();
   closeModal('jsonFill');
   goStep(2, 1);
   toast(`${next.cuts.length}컷을 채웠어요 · 바로 2단계`, 2600);
+  if(next.voiceUnknown){
+    setTimeout(()=>toast(`목소리 ${next.voiceUnknown} 는 지원하지 않아 기본 목소리로 맞췄어요`, 3200), 900);
+  }
   return next;
 }
 
@@ -1653,8 +1754,10 @@ async function gh(path, opts={}){
 }
 
 function payload(){
-  return {
+  const community = S.template === 'community';
+  const out = {
     title: S.title || '쇼츠',
+    template: community ? 'community' : 'default',
     voice: S.voice,
     rate: S.rate || '+12%',
     tone: S.tone,
@@ -1670,6 +1773,13 @@ function payload(){
       return cut;
     })
   };
+  if(community){
+    out.board_name = (S.board || DEFAULT_BOARD).trim() || DEFAULT_BOARD;
+    if((S.kicker||'').trim()) out.kicker = S.kicker.trim();
+    if((S.cmTime||'').trim()) out.time = S.cmTime.trim();
+    if(String(S.cmComments||'').trim()) out.comments = String(S.cmComments).trim();
+  }
+  return out;
 }
 
 /* ══════════════════════════════════════════════════════════
@@ -2367,7 +2477,9 @@ function syncRenderSummary(){
   const n = S.cuts.length;
   const secs = Math.round(S.cuts.reduce((a,c)=>a+estimateDur(c.narration||c.subtitle||''),0));
   $('#sumCuts').textContent = `${n}컷 · 약 ${secs}초`;
-  $('#sumVoice').textContent = `${S.voice.includes('InJoon')?'남성 (인준)':'여성 (선히)'} · ${S.rate || '+12%'} · BGM ${S.bgm===false?'OFF':'ON'}`;
+  $('#sumTemplate').textContent = S.template === 'community'
+    ? `🩵 커뮤니티 썰 · ${(S.board || DEFAULT_BOARD)}` : '🎬 기본 쇼츠';
+  $('#sumVoice').textContent = `${voiceShort(S.voice)} · ${S.rate || '+12%'} · BGM ${S.bgm===false?'OFF':'ON'}`;
   if(!$('#stepList').children.length){
     setRenderStages([
       {name:'렌더 요청', state:''},{name:'ffmpeg · 폰트 설치', state:''},
@@ -2400,7 +2512,7 @@ function init(){
   $('#topic').value = S.topic;
   $('#hookTitle').value = S.title;
   $$('#toneChips .chip').forEach(b=>b.setAttribute('aria-pressed', String(b.dataset.tone===S.tone)));
-  $$('#voiceChips .chip').forEach(b=>b.setAttribute('aria-pressed', String(b.dataset.voice===S.voice)));
+  applyVoiceUI(); applyTemplateUI();
   renderCuts(); renderPreview(); refreshKeyState(); refreshLinks();
   // 앱을 나갔다 와도 보던 완성 영상(4단계)은 그대로 이어서 열립니다
   let startStep = 1;

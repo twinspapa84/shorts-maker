@@ -182,8 +182,9 @@ def audio_duration(path: Path) -> float:
 
 
 FALLBACK_VOICES = {
-    "ko-KR-InJoonNeural": ["ko-KR-InJoonNeural", "ko-KR-HyunsuMultilingualNeural"],
-    "ko-KR-SunHiNeural": ["ko-KR-SunHiNeural", "ko-KR-JiMinNeural"],
+    "ko-KR-InJoonNeural": ["ko-KR-InJoonNeural", "ko-KR-HyunsuMultilingualNeural", "ko-KR-SunHiNeural"],
+    "ko-KR-HyunsuMultilingualNeural": ["ko-KR-HyunsuMultilingualNeural", "ko-KR-InJoonNeural"],
+    "ko-KR-SunHiNeural": ["ko-KR-SunHiNeural", "ko-KR-InJoonNeural"],
 }
 
 
@@ -1455,6 +1456,274 @@ def chunk_timings(parts: list[str], voice_dur: float, dur: float) -> list[tuple[
 
 
 # ----------------------------------------------------------------------------
+# 커뮤니티 썰 스킨 (template="community")
+#   하늘색 게시판 헤더 + 굵은 검정 제목 + 메타바 · 흰 배경 · 둥근 이미지 프레임
+# ----------------------------------------------------------------------------
+CM_HEADER_H = 168
+CM_HEADER_BG = (189, 226, 248)
+CM_INK = (18, 18, 18)
+CM_MUTED = (104, 110, 120)
+CM_LINE = (228, 230, 234)
+CM_MARK = (255, 232, 92)          # 형광펜 노랑
+CM_FRAME_W, CM_FRAME_H = 960, 620
+CM_FRAME_X = (W - CM_FRAME_W) // 2
+CM_FRAME_Y = 1172
+CM_FRAME_RADIUS = 38
+CM_BODY_Y, CM_BODY_H = 742, 396
+CM_BODY_W = 900
+CM_BODY_SIZES = (94, 88, 82, 76, 70, 64)
+CM_TITLE_SIZES = (88, 82, 76, 70, 64)
+CM_TITLE_W = 920
+CM_TITLE_TOP = 214
+CM_TITLE_BOTTOM = 566
+CM_TITLE_TOP_KICKER = 272
+CM_DEFAULT_BOARD = "썰랄라"
+CM_CHUNK_LEN = 26
+
+
+def community_info(payload: dict) -> dict:
+    """payload에서 게시판명·시간·댓글수를 뽑습니다. 없으면 제목 기준으로 자연스럽게 만듭니다."""
+    seed = int(hashlib.sha256(str(payload.get("title") or "").encode("utf-8")).hexdigest()[:6], 16)
+    board = re.sub(r"\s+", " ", str(payload.get("board_name") or "").strip()) or CM_DEFAULT_BOARD
+    t = str(payload.get("time") or "").strip()
+    if not re.fullmatch(r"\d{1,2}:\d{2}", t):
+        t = f"{(seed % 15) + 8:02d}:{(seed // 7) % 60:02d}"
+    try:
+        comments = int(payload.get("comments"))
+    except Exception:  # noqa: BLE001
+        comments = 0
+    if comments <= 0:
+        comments = 17 + (seed // 13) % 480
+    return {
+        "board": board[:16],
+        "time": t,
+        "comments": comments,
+        "kicker": re.sub(r"\s+", " ", str(payload.get("kicker") or "").strip())[:40],
+    }
+
+
+def _cm_icon_search(d, cx: float, cy: float, r: float = 26, color=CM_INK, width: int = 7) -> None:
+    d.ellipse([cx - r, cy - r, cx + r, cy + r], outline=color, width=width)
+    x0, y0 = cx + r * 0.70, cy + r * 0.70
+    d.line([x0, y0, x0 + r * 0.80, y0 + r * 0.80], fill=color, width=width)
+
+
+def _cm_icon_menu(d, cx: float, cy: float, half: float = 28, color=CM_INK, width: int = 7) -> None:
+    for k in (-1, 0, 1):
+        y = cy + k * (half * 0.62)
+        d.rounded_rectangle([cx - half, y - width / 2, cx + half, y + width / 2],
+                            radius=width / 2, fill=color)
+
+
+def _cm_icon_clock(d, cx: float, cy: float, r: float = 15, color=CM_MUTED, width: int = 4) -> None:
+    d.ellipse([cx - r, cy - r, cx + r, cy + r], outline=color, width=width)
+    d.line([cx, cy, cx, cy - r * 0.58], fill=color, width=width)
+    d.line([cx, cy, cx + r * 0.44, cy + r * 0.16], fill=color, width=width)
+
+
+def _cm_icon_comment(d, cx: float, cy: float, w: float = 36, h: float = 28,
+                     color=CM_MUTED, width: int = 4) -> None:
+    d.rounded_rectangle([cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2 - 5],
+                        radius=9, outline=color, width=width)
+    d.polygon([(cx - w * 0.20, cy + h / 2 - 7), (cx + w * 0.04, cy + h / 2 - 7),
+               (cx - w * 0.14, cy + h / 2 + 7)], fill=color)
+
+
+def community_layout(title: str, info: dict) -> dict:
+    """제목 줄 수에 맞춰 제목·메타바·구분선·본문 영역의 위치를 한 번에 정합니다."""
+    from PIL import Image, ImageDraw
+
+    probe = ImageDraw.Draw(Image.new("RGB", (8, 8)))
+    clean = " ".join(str(title or "").split())
+    top = CM_TITLE_TOP + (58 if info.get("kicker") else 0)
+    title_font, lines = None, []
+    for size in CM_TITLE_SIZES:
+        f = load_font(size)
+        cand = balance_lines(probe, wrap_text(probe, clean, f, CM_TITLE_W), f)
+        if len(cand) <= 3 and top + int(size * 1.26) * len(cand) <= CM_TITLE_BOTTOM:
+            title_font, lines = f, cand
+            break
+    if not lines:
+        title_font = load_font(CM_TITLE_SIZES[-1])
+        lines = (balance_lines(probe, wrap_text(probe, clean, title_font, CM_TITLE_W), title_font)
+                 or [clean])[:3]
+    line_h = int(title_font.size * 1.26)
+    title_h = line_h * len(lines)
+    slack = max(0, CM_TITLE_BOTTOM - top - title_h)
+    title_top = top + int(slack * 0.35)          # 남는 공간은 위쪽에 조금 더 둡니다
+    title_bottom = title_top + title_h
+    meta1 = title_bottom + 86
+    meta2 = meta1 + 66
+    divider = meta2 + 46
+    body_y = divider + 34
+    body_h = max(CM_FRAME_Y - 40 - body_y, 280)
+    return {
+        "font": title_font, "lines": lines, "line_h": line_h, "title_top": title_top,
+        "meta1": meta1, "meta2": meta2, "divider": divider,
+        "body_y": body_y, "body_h": body_h,
+    }
+
+
+def make_community_overlay(info: dict, layout: dict, index: int, total: int, dest: Path) -> Path:
+    """커뮤니티 스킨 배경 한 장 — 흰 바탕 + 하늘색 게시판 헤더 + 제목 + 메타바 + 구분선."""
+    from PIL import Image, ImageDraw
+
+    img = Image.new("RGB", (W, H), (255, 255, 255))
+    d = ImageDraw.Draw(img)
+
+    # 1) 상단 하늘색 헤더 바 (게시판명 가운데 · 돋보기·메뉴 아이콘)
+    d.rectangle([0, 0, W, CM_HEADER_H], fill=CM_HEADER_BG)
+    board_font = load_font(60)
+    while text_width(d, info["board"], board_font) > 620 and board_font.size > 32:
+        board_font = load_font(board_font.size - 4)
+    d.text((W / 2, CM_HEADER_H / 2 + 2), info["board"], font=board_font, fill=CM_INK, anchor="mm")
+    _cm_icon_search(d, 930, CM_HEADER_H / 2, r=26)
+    _cm_icon_menu(d, 1016, CM_HEADER_H / 2, half=27)
+    d.line([(0, CM_HEADER_H), (W, CM_HEADER_H)], fill=(168, 209, 236), width=2)
+
+    # 2) 컷 진행 표시 (헤더 바로 아래 얇은 막대)
+    margin, gap, bar_y, bar_h = 60, 8, CM_HEADER_H + 12, 6
+    seg = (W - margin * 2 - gap * max(total - 1, 0)) / max(total, 1)
+    for i in range(total):
+        x0 = margin + i * (seg + gap)
+        color = (96, 172, 222) if i <= index else (230, 236, 242)
+        rounded(d, [x0, bar_y, x0 + seg, bar_y + bar_h], radius=3, fill=color)
+
+    # 3) 한 줄 부제(선택) — 헤더 아래 작은 회색 글씨
+    if info.get("kicker"):
+        kf = load_font(34)
+        d.text((W / 2, CM_HEADER_H + 62), info["kicker"], font=kf, fill=(84, 88, 96), anchor="mm")
+
+    # 4) 굵은 검정 제목 — 화면 폭에 맞춰 자동 줄바꿈(최대 3줄)
+    font, lines, line_h, title_top = layout["font"], layout["lines"], layout["line_h"], layout["title_top"]
+    for i, ln in enumerate(lines):
+        if not ln:
+            continue
+        d.text((W / 2, title_top + line_h * i + line_h / 2), ln,
+               font=font, fill=CM_INK, anchor="mm")
+
+    # 5) 메타바 — 익명 · 시간 · 댓글수
+    d.text((66, layout["meta1"]), "익명", font=load_font(40), fill=(72, 76, 84), anchor="lm")
+    small_font = load_font(38)
+    _cm_icon_clock(d, 84, layout["meta2"], r=15)
+    d.text((112, layout["meta2"]), info["time"], font=small_font, fill=CM_MUTED, anchor="lm")
+    _cm_icon_comment(d, 252, layout["meta2"])
+    d.text((282, layout["meta2"]), f"{info['comments']}", font=small_font, fill=CM_MUTED, anchor="lm")
+
+    # 6) 얇은 구분선
+    d.line([(58, layout["divider"]), (W - 58, layout["divider"])], fill=CM_LINE, width=3)
+
+    img.save(dest)
+    return dest
+
+
+def pick_community_font(texts: list[str]):
+    """모든 컷의 본문이 3줄 안에 들어가는 가장 큰 글씨(영상 전체에서 같은 크기)."""
+    from PIL import Image, ImageDraw
+
+    probe = ImageDraw.Draw(Image.new("RGB", (8, 8)))
+    for size in CM_BODY_SIZES:
+        font = load_font(size)
+        ok = True
+        for t in texts:
+            for chunk in split_chunks_tokens(parse_tokens(t), max_len=CM_CHUNK_LEN) or [[]]:
+                plain = tokens_plain(chunk)
+                if not plain:
+                    continue
+                lines = balance_lines(probe, wrap_text(probe, plain, font, CM_BODY_W), font)
+                if len(lines) > 3:
+                    ok = False
+                    break
+            if not ok:
+                break
+        if ok:
+            return font
+    return load_font(CM_BODY_SIZES[-1])
+
+
+def make_community_body(chunk, font, body_h: int, dest: Path) -> Path:
+    """가운데 영역 본문 한 조각 — 굵은 검정 글씨 + **강조** 형광펜."""
+    from PIL import Image, ImageDraw
+
+    if isinstance(chunk, str):
+        chunk = parse_tokens(chunk)
+    plain, styles = chunk_styled_text(chunk)
+    img = Image.new("RGBA", (W, body_h), (0, 0, 0, 0))
+    if not plain:
+        img.save(dest)
+        return dest
+
+    d = ImageDraw.Draw(img, "RGBA")
+    lines = wrap_lines_with_offsets(d, plain, font, CM_BODY_W)[:3]
+
+    # 문장 중간 띄어쓰기(항상 비강조로 들어감)로 형광펜이 끊기지 않게 이어 줍니다
+    for i in range(1, len(plain) - 1):
+        if not styles[i] and plain[i] == " " and styles[i - 1] and styles[i + 1]:
+            styles[i] = True
+
+    line_h = int(font.size * 1.32)
+    block_h = line_h * len(lines)
+    y0 = (body_h - block_h) / 2
+
+    for i, (line, start) in enumerate(lines):
+        cy = y0 + line_h * i + line_h / 2
+        runs = _line_runs(line, styles, start)
+        widths = [text_width(d, txt, font) for txt, _ in runs]
+        total_w = sum(widths)
+        x = (W - total_w) / 2
+        # 형광펜을 글자 뒤에 먼저 칠합니다
+        xx = x
+        for (txt, hi), wd in zip(runs, widths):
+            if hi and txt.strip():
+                d.rounded_rectangle(
+                    [xx - 6, cy - font.size * 0.56, xx + wd + 6, cy + font.size * 0.34],
+                    radius=10, fill=(*CM_MARK, 255),
+                )
+            xx += wd
+        xx = x
+        for (txt, _hi), wd in zip(runs, widths):
+            d.text((xx, cy), txt, font=font, fill=(*CM_INK, 255), anchor="lm")
+            xx += wd
+
+    img.save(dest)
+    return dest
+
+
+def community_frame_assets(visual: str, work: Path, idx: int) -> tuple[Path, Path]:
+    """프레임 안에서 움직일 원본(2배 크기 크롭)과 둥근 모서리 마스크를 만듭니다."""
+    from PIL import Image, ImageDraw
+
+    fw, fh = CM_FRAME_W, CM_FRAME_H
+    with Image.open(visual) as im:
+        im = im.convert("RGB")
+        sc = max((fw * 2) / im.size[0], (fh * 2) / im.size[1])
+        r = im.resize((int(im.size[0] * sc) + 1, int(im.size[1] * sc) + 1), Image.LANCZOS)
+        x0 = (r.size[0] - fw * 2) // 2
+        y0 = (r.size[1] - fh * 2) // 2
+        fg = r.crop((x0, y0, x0 + fw * 2, y0 + fh * 2))
+    fg_path = work / f"cm_fg_{idx:02d}.jpg"
+    fg.save(fg_path, quality=95, subsampling=1)
+
+    mask = Image.new("L", (fw, fh), 0)
+    ImageDraw.Draw(mask).rounded_rectangle([0, 0, fw - 1, fh - 1], radius=CM_FRAME_RADIUS, fill=255)
+    mask_path = work / f"cm_mask_{idx:02d}.png"
+    mask.save(mask_path)
+    return fg_path, mask_path
+
+
+def community_filter(idx: int, dur: float) -> str:
+    """프레임 안 원본을 부드럽게 줌/패닝하는 필터(정지 사진)."""
+    frames = int(math.ceil(dur * FPS)) + 2
+    d = max(frames - 1, 1)
+    z, x, y = card_motion_expr(idx, d)
+    return (
+        f"[0:v]fps={FPS},scale={CM_FRAME_W * 2}:{CM_FRAME_H * 2},crop={CM_FRAME_W * 2}:{CM_FRAME_H * 2},"
+        f"setsar=1,zoompan=z='{z}':x='{x}':y='{y}':d=1:s={CM_FRAME_W}x{CM_FRAME_H}:fps={FPS},"
+        "format=rgba[fgc]"
+    )
+
+
+# ----------------------------------------------------------------------------
 # 영상 합성
 # ----------------------------------------------------------------------------
 MOTION_MODES = [("in", 1.30), ("pan_r", 1.28), ("out", 1.34), ("pan_l", 1.26),
@@ -1552,9 +1821,15 @@ def render_cut(
     rate: str,
     work: Path,
     sub_font=None,
+    template: str = "default",
+    community_meta: dict | None = None,
+    cm_layout: dict | None = None,
 ) -> dict:
     idx = index
     is_last = idx == total - 1
+    community = str(template or "default").strip().lower() == "community"
+    cm_info = (community_meta or community_info({})) if community else None
+    layout = (cm_layout or community_layout(title, cm_info)) if community else None
     audio_path = work / f"voice_{idx:02d}.mp3"
 
     # 화면 자막은 나레이션을 '**노랑**' 마크업이 살아 있는 토큰으로 쪼개 순차 표시
@@ -1569,20 +1844,29 @@ def render_cut(
     pad_after = 0.5 if is_last else (0.24 if idx == 0 else 0.3)
     dur = round(max(voice_dur + pad_after, 1.6), 3)
 
-    chunks = split_chunks_tokens(spoken_tokens) or [spoken_tokens]
+    chunks = split_chunks_tokens(spoken_tokens, max_len=CM_CHUNK_LEN if community else 15) or [spoken_tokens]
     times = chunk_timings([tokens_plain(c) for c in chunks], voice_dur, dur)
-    font = sub_font or pick_sub_font(chunks)
+    font = sub_font or (pick_community_font([tts_text]) if community else pick_sub_font(chunks))
 
-    is_clip = visual_kind.startswith("clip")
-    clip_fill = visual_kind.endswith("fill")
-    still_card = visual_kind.startswith("product-card")
+    is_clip = visual_kind.startswith("clip") and not community
+    clip_fill = visual_kind.endswith("fill") and not community
+    still_card = visual_kind.startswith("product-card") and not community
     card_layers = load_card_layers(visual) if still_card else None
     if still_card and not card_layers:      # 레이어가 없으면 예전 방식으로 안전하게
         still_card = False
-    is_video_file = is_clip or visual.lower().endswith((".mp4", ".mov", ".webm", ".mkv"))
+    is_video_file = (visual_kind.startswith("clip")
+                     or visual.lower().endswith((".mp4", ".mov", ".webm", ".mkv")))
 
     inputs: list[str] = []
-    if is_video_file:
+    cm_mask_path: Path | None = None
+    if community:
+        # 커뮤니티 스킨: 이미지는 프레임 크기로 크롭한 2배 원본 위에서 줌/패닝
+        if is_video_file:
+            inputs += ["-stream_loop", "-1", "-i", visual]
+        else:
+            cm_fg, cm_mask_path = community_frame_assets(visual, work, idx)
+            inputs += ["-loop", "1", "-framerate", str(FPS), "-i", str(cm_fg)]
+    elif is_video_file:
         inputs += ["-stream_loop", "-1", "-i", visual]
     elif still_card:
         # [0] 블러 배경, [1] 카드 안에서 움직일 원본(2배 크기)
@@ -1591,15 +1875,28 @@ def render_cut(
     else:
         inputs += ["-loop", "1", "-framerate", str(FPS), "-i", visual]
 
-    ui = make_ui_overlay(title, idx, total, work / f"ui_{idx:02d}.png")
+    if community:
+        ui = make_community_overlay(cm_info, layout, idx, total, work / f"ui_{idx:02d}.png")
+    else:
+        ui = make_ui_overlay(title, idx, total, work / f"ui_{idx:02d}.png")
     inputs += ["-loop", "1", "-framerate", str(FPS), "-i", str(ui)]
     ui_idx = 1 if not still_card else 2
     strip_paths: list[Path] = []
     for k, chunk in enumerate(chunks):
-        sp = make_subtitle_strip(chunk, font, work / f"sub_{idx:02d}_{k}.png")
+        if community:
+            sp = make_community_body(chunk, font, layout["body_h"], work / f"sub_{idx:02d}_{k}.png")
+        else:
+            sp = make_subtitle_strip(chunk, font, work / f"sub_{idx:02d}_{k}.png")
         strip_paths.append(sp)
         inputs += ["-loop", "1", "-framerate", str(FPS), "-i", str(sp)]
     next_idx = ui_idx + 1 + len(strip_paths)
+
+    # 커뮤니티 프레임의 둥근 모서리 마스크 입력
+    cm_mask_idx = None
+    if community and cm_mask_path is not None:
+        cm_mask_idx = next_idx
+        inputs += ["-loop", "1", "-framerate", str(FPS), "-i", str(cm_mask_path)]
+        next_idx += 1
 
     # 둥근 카드(움직이는 클립 / 움직이는 정지 사진)용 마스크·그림자 입력
     card = None
@@ -1624,7 +1921,21 @@ def render_cut(
 
     filt: list[str] = []
     prev, n = "bg", 1
-    if is_clip and not clip_fill and card:
+    if community:
+        # 흰 바탕(헤더·제목·메타바) 위에 둥근 프레임 이미지를 얹습니다
+        if is_video_file:
+            filt.append(
+                f"[0:v]fps={FPS},scale={CM_FRAME_W * 2}:{CM_FRAME_H * 2}:force_original_aspect_ratio=increase,"
+                f"crop={CM_FRAME_W * 2}:{CM_FRAME_H * 2},scale={CM_FRAME_W}:{CM_FRAME_H},"
+                "setsar=1,eq=saturation=1.05:contrast=1.03,format=rgba[fgc]"
+            )
+        else:
+            filt.append(community_filter(idx, dur))
+        filt.append(f"[fgc][{cm_mask_idx}:v]alphamerge[framev]")
+        filt.append(f"[{ui_idx}:v][framev]overlay={CM_FRAME_X}:{CM_FRAME_Y}:format=auto[v{n}]")
+        prev = f"v{n}"
+        n += 1
+    elif is_clip and not clip_fill and card:
         # 어두운 블러 배경(같은 영상이 흐릿하게 움직임) + 가운데 둥근 카드에서 원본 재생
         filt.append(f"[0:v]fps={FPS},split=2[bgsrc][fgsrc]")
         filt.append(
@@ -1677,14 +1988,15 @@ def render_cut(
             bg = ken_burns_filter(mode, frames, dur)
         filt.append(f"[0:v]{bg}[{prev}]")
 
-    filt.append(f"[{prev}][{ui_idx}:v]overlay=0:0:format=auto[v{n}]")
-    prev = f"v{n}"
-    n += 1
+    if not community:      # 커뮤니티 스킨은 위에서 흰 바탕(ui)까지 이미 합쳤습니다
+        filt.append(f"[{prev}][{ui_idx}:v]overlay=0:0:format=auto[v{n}]")
+        prev = f"v{n}"
+        n += 1
     for k, (s, e) in enumerate(times):
         if e <= s + 0.05:
             continue
         filt.append(
-            f"[{prev}][{ui_idx + 1 + k}:v]overlay=0:{STRIP_Y}:"
+            f"[{prev}][{ui_idx + 1 + k}:v]overlay=0:{layout['body_y'] if community else STRIP_Y}:"
             f"enable='between(t,{s:.3f},{e:.3f})':format=auto[v{n}]"
         )
         prev = f"v{n}"
@@ -1831,6 +2143,10 @@ def main() -> int:
     title = (payload.get("title") or "").strip()
     voice = payload.get("voice") or "ko-KR-InJoonNeural"
     rate = payload.get("rate") or "+12%"
+    template = str(payload.get("template") or "default").strip().lower() or "default"
+    community = template == "community"
+    cm_info = community_info(payload) if community else None
+    cm_layout = community_layout(title, cm_info) if community else None
     pexels_key = os.environ.get("PEXELS_API_KEY", "").strip()
     use_bgm = (payload.get("bgm", True) is not False) and not args.no_bgm
     use_sfx = (payload.get("sfx", True) is not False) and not args.no_bgm
@@ -1842,7 +2158,7 @@ def main() -> int:
 
     log(f"폰트: {FONT_PATH}")
     log(f"컷 {len(cuts_in)}개 · 보이스 {voice} · 속도 {rate} · "
-        f"Pexels {'사용' if pexels_key else '없음'} · BGM {'ON' if use_bgm else 'OFF'}")
+        f"템플릿 {template} · Pexels {'사용' if pexels_key else '없음'} · BGM {'ON' if use_bgm else 'OFF'}")
 
     # 자막 글씨 크기는 영상 전체에서 같아야 깔끔합니다
     all_chunks: list[str] = []
@@ -1850,7 +2166,11 @@ def main() -> int:
         spoken = (cut.get("narration") or cut.get("subtitle") or "").strip()
         toks = parse_tokens(spoken)
         all_chunks += [tokens_plain(c) for c in split_chunks_tokens(toks)] if toks else []
-    sub_font = pick_sub_font(all_chunks) if all_chunks else None
+    if community:
+        cm_texts = [(c.get("subtitle") or c.get("narration") or "").strip() for c in cuts_in]
+        sub_font = pick_community_font([t for t in cm_texts if t])
+    else:
+        sub_font = pick_sub_font(all_chunks) if all_chunks else None
 
     started = time.time()
     results: list[dict] = []
@@ -1870,6 +2190,7 @@ def main() -> int:
             index=i, total=len(cuts_in), visual=visual, visual_kind=kind,
             narration=narration, subtitle=subtitle, title=title,
             voice=voice, rate=rate, work=work, sub_font=sub_font,
+            template=template, community_meta=cm_info, cm_layout=cm_layout,
         ))
 
     if not results:
@@ -1900,6 +2221,7 @@ def main() -> int:
     total_dur = audio_duration(out_path)
     manifest = {
         "title": title,
+        "template": template,
         "voice": voice,
         "rate": rate,
         "cut_count": len(results),
