@@ -541,7 +541,7 @@ def download_media(url: str, timeout: int = 90) -> tuple[bytes, str] | None:
         return None
 
 
-CLIP_EXTS = (".mp4", ".mov", ".webm", ".m4v", ".avi", ".mkv", ".gif")
+CLIP_EXTS = (".mp4", ".mov", ".webm", ".m4v", ".avi", ".mkv", ".gif", ".webp")
 
 
 def sniff_media(data: bytes, content_type: str = "") -> str:
@@ -558,8 +558,10 @@ def sniff_media(data: bytes, content_type: str = "") -> str:
     if head[:4] == b"RIFF" and head[8:12] == b"AVI ":
         return "video"
     if head[:4] == b"RIFF" and head[8:12] == b"WEBP":
-        # 애니메이션 WebP 는 영상처럼 다룹니다
-        return "gif" if data[12:16] == b"ANIM" else "image"
+        # 애니메이션 WebP 는 ANIM 청크(또는 VP8X 애니메이션 플래그)를 가집니다 → 영상처럼 취급
+        if b"ANIM" in data[:64] or (data[12:16] == b"VP8X" and len(data) > 20 and data[20] & 0x02):
+            return "gif"
+        return "image"
     if head[:4] == b"\x89PNG" or head[:2] == b"\xff\xd8" or head[:4] == b"RIFF" or head[:2] == b"BM":
         return "image"
     if ct.startswith("image/"):
@@ -605,13 +607,29 @@ def save_clip(data: bytes, dest: Path, url: str = "") -> str | None:
     m = re.search(r"\.([a-zA-Z0-9]{2,5})(?:$|[?#])", url or "")
     ext = f".{m.group(1).lower()}" if m and f".{m.group(1).lower()}" in CLIP_EXTS else ""
     if not ext:
-        ext = ".gif" if data[:4] == b"GIF8" else ".mp4"
+        if data[:4] == b"GIF8":
+            ext = ".gif"
+        elif data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+            ext = ".webp"      # 움직이는 WebP(ANIM) 도 ffmpeg 로 반복 재생
+        else:
+            ext = ".mp4"
     p = dest.with_suffix(f".clip{ext}")
     try:
         p.write_bytes(data)
     except Exception as e:  # noqa: BLE001
         log(f"  클립 저장 실패: {e}")
         return None
+    if p.suffix.lower() == ".webp":
+        # 움직이는 WebP 는 ffmpeg 로 한 번 mp4 로 바꿔 두면 반복 재생이 빠르고 안정적입니다
+        mp4 = p.with_suffix(".clip.mp4")
+        try:
+            run([FFMPEG, "-y", "-i", str(p), "-an", "-c:v", "libx264", "-preset", "veryfast",
+                 "-pix_fmt", "yuv420p", "-crf", "20", str(mp4)], timeout=300)
+            p.unlink(missing_ok=True)
+            p = mp4
+        except Exception as e:  # noqa: BLE001
+            log(f"  WebP → MP4 변환 실패: {e}")
+            mp4.unlink(missing_ok=True)
     if not probe_clip(p):
         log("  클립을 읽지 못했습니다(GIF/영상 아님) — 사진으로 다시 시도합니다.")
         p.unlink(missing_ok=True)
