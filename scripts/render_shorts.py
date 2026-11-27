@@ -695,6 +695,71 @@ def product_frame(data: bytes, dest: Path, fit: str = "blur") -> str | None:
     return str(p)
 
 
+def product_card_layers(data: bytes, dest: Path) -> str | None:
+    """정지 사진을 '카드 모션'용 레이어로 나눠 저장합니다(blur 카드 모드).
+
+    - bg: 9:16 블러 배경 한 장 (카드 뒤에서 아주 천천히 움직임)
+    - fg: 카드 크기의 2배 사본 → 카드 안에서 1.0~1.13배 줌/팬 (정지 사진도 살아 있게)
+    - meta: 카드 위치·크기 JSON (render_cut 이 마스크·그림자와 함께 합성)
+    """
+    import io
+
+    from PIL import Image, ImageEnhance, ImageFilter
+
+    try:
+        im = Image.open(io.BytesIO(data)).convert("RGB")
+    except Exception:
+        return None
+    w, h = im.size
+    if min(w, h) < 200:
+        return None
+
+    def cover(src, tw, th):
+        sc = max(tw / src.size[0], th / src.size[1])
+        r = src.resize((int(src.size[0] * sc) + 1, int(src.size[1] * sc) + 1), Image.LANCZOS)
+        x0 = (r.size[0] - tw) // 2
+        y0 = (r.size[1] - th) // 2
+        return r.crop((x0, y0, x0 + tw, y0 + th))
+
+    bg = cover(im, W, H).filter(ImageFilter.GaussianBlur(44))
+    bg = ImageEnhance.Brightness(bg).enhance(0.42)
+    bg = ImageEnhance.Color(bg).enhance(0.85)
+    bg_path = dest.with_suffix(".cardbg.jpg")
+    bg.save(bg_path, quality=90, subsampling=1)
+
+    cw, ch, cx, cy = card_geometry(w, h)
+    # 카드 안에서 1.13배까지 줌해도 화질이 남도록 2배 크기로 미리 맞춰 둡니다
+    fg_path = dest.with_suffix(".cardfg.jpg")
+    cover(im, cw * 2, ch * 2).save(fg_path, quality=95, subsampling=1)
+
+    Path(str(bg_path) + ".card.json").write_text(
+        json.dumps({"bg": str(bg_path), "fg": str(fg_path),
+                    "w": cw, "h": ch, "x": cx, "y": cy}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    return str(bg_path)
+
+
+def load_card_layers(visual: str) -> dict | None:
+    """product_card_layers 가 남긴 레이어 정보를 읽습니다."""
+    try:
+        meta = json.loads(Path(str(visual) + ".card.json").read_text(encoding="utf-8"))
+        if Path(meta["bg"]).exists() and Path(meta["fg"]).exists():
+            return meta
+    except Exception:  # noqa: BLE001
+        pass
+    return None
+
+
+def still_visual(data: bytes, dest: Path, image_fit: str) -> tuple[str, str] | None:
+    """정지 사진 한 장 → (파일, 종류). blur 는 카드 레이어, fill 은 꽉 찬 배경."""
+    if image_fit == "fill":
+        path = product_frame(data, dest, "fill")
+        return (path, "product-fill") if path else None
+    path = product_card_layers(data, dest)
+    return (path, "product-card") if path else None
+
+
 def picsum_visual(dest: Path, seed: int) -> tuple[str, str] | None:
     """Picsum — 검색과 무관하지만 '진짜 사진'은 보장되는 마지막 사진 폴백."""
     try:
@@ -818,20 +883,20 @@ def fetch_visual(query: str, index: int, work: Path, pexels_key: str = "",
                 if path:
                     kind = "clip-fill" if image_fit == "fill" else "clip-blur"
                     return done(path, kind)
-                path = product_frame(data, dest, "fill" if image_fit == "fill" else "blur")
-                if path:
-                    return done(path, "product-fill" if image_fit == "fill" else "product")
+                got = still_visual(data, dest, image_fit)
+                if got:
+                    return done(*got)
             else:
-                path = product_frame(data, dest, "fill" if image_fit == "fill" else "blur")
-                if path:
-                    return done(path, "product-fill" if image_fit == "fill" else "product")
+                got = still_visual(data, dest, image_fit)
+                if got:
+                    return done(*got)
         else:
             # 예전처럼 사진만 시도하는 경로(작은 이미지·특이한 서버 대응)
             data = download_image(image_url)
             if data:
-                path = product_frame(data, dest, "fill" if image_fit == "fill" else "blur")
-                if path:
-                    return done(path, "product-fill" if image_fit == "fill" else "product")
+                got = still_visual(data, dest, image_fit)
+                if got:
+                    return done(*got)
 
     if pexels_key:
         got = pexels_visual(query, pexels_key, dest, seed)
@@ -1047,25 +1112,82 @@ def chunk_styled_text(chunk: list[tuple[str, list[bool]]]) -> tuple[str, list[bo
     return plain, styles
 
 
-def draw_hook(img, title: str) -> None:
-    """상단 훅 타이틀 — 노란 형광펜 마커 + 검정 굵은 글씨."""
-    from PIL import ImageDraw
+def split_two_lines(draw, text: str, font, max_w: float) -> list[str] | None:
+    """두 줄로 나눌 때 앞·뒤 줄 폭이 가장 비슷해지는 낱말 경계를 골라 줍니다."""
+    words = text.split()
+    if len(words) < 2:
+        return None
+    best: tuple[float, str, str] | None = None
+    for k in range(1, len(words)):
+        a, b = " ".join(words[:k]), " ".join(words[k:])
+        wa, wb = text_width(draw, a, font), text_width(draw, b, font)
+        if wa <= max_w and wb <= max_w:
+            if best is None or abs(wa - wb) < best[0]:
+                best = (abs(wa - wb), a, b)
+    return [best[1], best[2]] if best else None
 
+
+def draw_hook(img, title: str) -> None:
+    """상단 훅 타이틀 — 하나의 노란 둥근 배지 안에 1~2줄 중앙 정렬 + 부드러운 그림자."""
+    from PIL import Image, ImageDraw, ImageFilter
+
+    title = " ".join(str(title or "").split())
     if not title:
         return
+
+    probe = ImageDraw.Draw(Image.new("RGB", (8, 8)))
+    inner_w = 860
+    short = len(title) <= 14
+    hook_bottom = CARD_BOTTOM - CARD_MAX_H - 16        # 카드와 붙지 않게
+    font = None
+    lines: list[str] = []
+    for size in (66, 62, 58, 54, 50, 46, 42, 38):
+        f = load_font(size)
+        if short:
+            # 짧은 제목은 무조건 한 줄 — 글씨를 줄여서라도 통짜로
+            if text_width(probe, title, f) > inner_w:
+                continue
+            cand = [title]
+        else:
+            # 긴 제목은 두 줄 — 좌우 폭이 비슷한 낱말 경계에서 끊습니다
+            cand = split_two_lines(probe, title, f, inner_w) or wrap_text(probe, title, f, inner_w)
+            if len(cand) > 2:
+                continue
+        if HOOK_Y + int(round(f.size * 1.30)) * len(cand) + max(20, int(f.size * 0.32)) * 2 + 6 <= hook_bottom:
+            font, lines = f, cand
+            break
+    if font is None:                                     # 아주 긴 제목의 마지막 안전망
+        font = load_font(36)
+        lines = (wrap_text(probe, title, font, inner_w) or [title])[:2]
+
+    line_h = int(round(font.size * 1.30))
+    pad_x = max(38, int(font.size * 0.68))
+    pad_y = max(20, int(font.size * 0.32))
+    tw = max(text_width(probe, ln, font) for ln in lines)
+    box_w = int(min(W - 56, tw + pad_x * 2))
+    box_h = int(line_h * len(lines) + pad_y * 2)
+    x0 = (W - box_w) / 2
+    y0 = HOOK_Y
+    radius = max(22, int(font.size * 0.46))
+
+    # 배지 그림자 — 한 번만 부드럽게 깔아서 배지가 떠 보이게
+    shadow = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    ImageDraw.Draw(shadow).rounded_rectangle(
+        [x0 - 4, y0 + 12, x0 + box_w + 4, y0 + box_h + 18], radius=radius + 4, fill=(0, 0, 0, 130)
+    )
+    img.alpha_composite(shadow.filter(ImageFilter.GaussianBlur(16)))
+
     d = ImageDraw.Draw(img, "RGBA")
-    font, lines = fit_text(d, title, 840, 2, [66, 60, 54, 48, 42])
-    line_h = int(font.size * 1.42)
-    y = HOOK_Y
-    for line in lines:
-        tw = text_width(d, line, font)
-        x0 = (W - tw) / 2
-        box = [x0 - 26, y, x0 + tw + 26, y + line_h - 6]
-        rounded(d, box, radius=16, fill=(*AMBER, 246))
-        # 살짝 위에 밝은 라인을 얹어 형광펜 질감
-        rounded(d, [box[0], box[1], box[2], box[1] + 6], radius=3, fill=(255, 236, 130, 200))
-        d.text(((W / 2), y + (line_h - 6) / 2 + 2), line, font=font, fill=(14, 14, 16, 255), anchor="mm")
-        y += line_h
+    rounded(d, [x0, y0, x0 + box_w, y0 + box_h], radius=radius, fill=(*AMBER, 250))
+    # 형광펜 느낌의 위쪽 하이라이트 · 살짝 밝은 테두리
+    rounded(d, [x0 + 12, y0 + 7, x0 + box_w - 12, y0 + 7 + max(8, int(font.size * 0.16))],
+            radius=6, fill=(255, 240, 150, 150))
+    rounded(d, [x0 + 1, y0 + 1, x0 + box_w - 1, y0 + box_h - 1], radius=radius - 1,
+            outline=(255, 232, 120, 120), width=2)
+
+    cy0 = y0 + box_h / 2 - (len(lines) - 1) * line_h / 2
+    for i, line in enumerate(lines):
+        d.text((W / 2, cy0 + i * line_h), line, font=font, fill=(16, 15, 14, 255), anchor="mm")
 
 
 def draw_progress(img, index: int, total: int) -> None:
@@ -1369,6 +1491,23 @@ def ken_burns_filter(mode: str, frames: int, dur: float, base: float = 1.24,
     )
 
 
+def card_motion_expr(idx: int, d: int) -> tuple[str, str, str]:
+    """둥근 카드 안 정지 사진용 줌/패닝 식 — 컷마다 줌인·좌우 패닝·줌아웃을 번갈아 씁니다.
+    (z, x, y) 식. zoompan 입력이 카드의 2배 크기이므로 화질 손실 없이 1.13배까지 당깁니다."""
+    d = max(d, 1)
+    cx = "iw/2-(iw/zoom/2)"
+    cy = "ih/2-(ih/zoom/2)"
+    mode = idx % 4
+    if mode == 0:      # 1.0 → 1.13 줌인
+        return (f"1+0.13*on/{d}", cx, cy)
+    if mode == 1:      # 살짝 당긴 채 오른쪽으로 미세 패닝
+        return ("1.11", f"(iw-iw/zoom)*on/{d}", cy)
+    if mode == 2:      # 1.13 → 1.0 줌아웃
+        return (f"1.13-0.13*on/{d}", cx, cy)
+    # 살짝 당긴 채 왼쪽으로 미세 패닝
+    return ("1.11", f"(iw-iw/zoom)*(1-on/{d})", cy)
+
+
 def card_assets(card_w: int, card_h: int, work: Path, idx: int):
     """영상 카드용 마스크(둥근 모서리)와 그림자 PNG."""
     from PIL import Image, ImageDraw, ImageFilter
@@ -1436,36 +1575,49 @@ def render_cut(
 
     is_clip = visual_kind.startswith("clip")
     clip_fill = visual_kind.endswith("fill")
+    still_card = visual_kind.startswith("product-card")
+    card_layers = load_card_layers(visual) if still_card else None
+    if still_card and not card_layers:      # 레이어가 없으면 예전 방식으로 안전하게
+        still_card = False
     is_video_file = is_clip or visual.lower().endswith((".mp4", ".mov", ".webm", ".mkv"))
 
     inputs: list[str] = []
     if is_video_file:
         inputs += ["-stream_loop", "-1", "-i", visual]
+    elif still_card:
+        # [0] 블러 배경, [1] 카드 안에서 움직일 원본(2배 크기)
+        inputs += ["-loop", "1", "-framerate", str(FPS), "-i", card_layers["bg"]]
+        inputs += ["-loop", "1", "-framerate", str(FPS), "-i", card_layers["fg"]]
     else:
         inputs += ["-loop", "1", "-framerate", str(FPS), "-i", visual]
 
     ui = make_ui_overlay(title, idx, total, work / f"ui_{idx:02d}.png")
     inputs += ["-loop", "1", "-framerate", str(FPS), "-i", str(ui)]
+    ui_idx = 1 if not still_card else 2
     strip_paths: list[Path] = []
     for k, chunk in enumerate(chunks):
         sp = make_subtitle_strip(chunk, font, work / f"sub_{idx:02d}_{k}.png")
         strip_paths.append(sp)
         inputs += ["-loop", "1", "-framerate", str(FPS), "-i", str(sp)]
-    next_idx = 2 + len(strip_paths)
+    next_idx = ui_idx + 1 + len(strip_paths)
 
-    # 영상·GIF 카드(움직이는 상품)용 마스크/그림자 입력
+    # 둥근 카드(움직이는 클립 / 움직이는 정지 사진)용 마스크·그림자 입력
     card = None
     if is_clip and not clip_fill:
         size = probe_clip(Path(visual)) or (W, H)
         cw, ch, cx0, cy0 = card_geometry(*size)
-        mask_path, shadow_path, pad = card_assets(cw, ch, work, idx)
-        mask_idx = next_idx
+        card = {"w": cw, "h": ch, "x": cx0, "y": cy0}
+    elif still_card:
+        cw, ch, cx0, cy0 = (int(card_layers[k]) for k in ("w", "h", "x", "y"))
+        card = {"w": cw, "h": ch, "x": cx0, "y": cy0}
+    if card:
+        mask_path, shadow_path, pad = card_assets(card["w"], card["h"], work, idx)
+        card["mask"] = next_idx
         inputs += ["-loop", "1", "-framerate", str(FPS), "-i", str(mask_path)]
-        shadow_idx = next_idx + 1
+        card["shadow"] = next_idx + 1
         inputs += ["-loop", "1", "-framerate", str(FPS), "-i", str(shadow_path)]
+        card["pad"] = pad
         next_idx += 2
-        card = {"w": cw, "h": ch, "x": cx0, "y": cy0, "mask": mask_idx,
-                "shadow": shadow_idx, "pad": pad}
 
     audio_idx = next_idx
     inputs += ["-i", str(audio_path)]
@@ -1489,6 +1641,28 @@ def render_cut(
         filt.append(f"[v0][cardv]overlay={card['x']}:{card['y']}:format=auto[v{n}]")
         prev = f"v{n}"
         n += 1
+    elif still_card:
+        # 어두운 블러 배경은 아주 천천히 다가오고, 가운데 둥근 카드 안에서 사진이 줌/팬
+        frames = int(math.ceil(dur * FPS)) + 2
+        d = max(frames - 1, 1)
+        filt.append(
+            f"[0:v]fps={FPS},scale=1350:2400:force_original_aspect_ratio=increase,crop=1350:2400,"
+            f"zoompan=z='1.02+0.045*on/{d}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':"
+            f"d=1:s={W}x{H}:fps={FPS},setsar=1,"
+            f"eq=brightness=-0.012:saturation=1.04:contrast=1.02[bgb]"
+        )
+        z, x, y = card_motion_expr(idx, d)
+        filt.append(
+            f"[1:v]fps={FPS},scale={card['w'] * 2}:{card['h'] * 2}:force_original_aspect_ratio=increase,"
+            f"crop={card['w'] * 2}:{card['h'] * 2},setsar=1,"
+            f"zoompan=z='{z}':x='{x}':y='{y}':d=1:s={card['w']}x{card['h']}:fps={FPS},"
+            f"format=rgba[fgc]"
+        )
+        filt.append(f"[fgc][{card['mask']}:v]alphamerge[cardv]")
+        filt.append(f"[bgb][{card['shadow']}:v]overlay={card['x'] - card['pad']}:{card['y'] - card['pad']}:format=auto[v0]")
+        filt.append(f"[v0][cardv]overlay={card['x']}:{card['y']}:format=auto[v{n}]")
+        prev = f"v{n}"
+        n += 1
     elif is_video_file:
         bg = (f"fps={FPS},scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},"
               f"setsar=1,eq=saturation=1.06:contrast=1.03")
@@ -1503,14 +1677,14 @@ def render_cut(
             bg = ken_burns_filter(mode, frames, dur)
         filt.append(f"[0:v]{bg}[{prev}]")
 
-    filt.append(f"[{prev}][1:v]overlay=0:0:format=auto[v{n}]")
+    filt.append(f"[{prev}][{ui_idx}:v]overlay=0:0:format=auto[v{n}]")
     prev = f"v{n}"
     n += 1
     for k, (s, e) in enumerate(times):
         if e <= s + 0.05:
             continue
         filt.append(
-            f"[{prev}][{2 + k}:v]overlay=0:{STRIP_Y}:"
+            f"[{prev}][{ui_idx + 1 + k}:v]overlay=0:{STRIP_Y}:"
             f"enable='between(t,{s:.3f},{e:.3f})':format=auto[v{n}]"
         )
         prev = f"v{n}"
