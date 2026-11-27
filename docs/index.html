@@ -543,7 +543,7 @@
       <div class="video-shell"><video id="player" controls playsinline preload="metadata"></video></div>
 
       <div class="save-card">
-        <button class="btn primary block" id="btnSaveVideo" type="button">📲 아이폰 사진첩에 저장</button>
+        <button class="btn primary block" id="btnSaveVideo" type="button">📲 아이폰에 저장</button>
         <div class="save-progress hidden" id="saveProgress">
           <div class="sp-bar"><i id="saveBar"></i></div>
           <div class="save-pct" id="savePct">영상 준비 중… 0%</div>
@@ -1931,9 +1931,13 @@ function fileShareSupported(){
     return !!navigator.canShare({files:[probe]});
   }catch(e){ return false; }
 }
+function isTouch(){
+  return (navigator.maxTouchPoints || 0) > 0 || /iphone|ipad|ipod|android|mobile/i.test(navigator.userAgent || '');
+}
 function saveLabel(){
-  if(fileShareSupported()) return isIos() ? '📲 아이폰 사진첩에 저장' : '📲 공유 시트로 저장';
-  return isIos() ? '⬇ 영상 저장 (파일 앱)' : '⬇ 영상 저장';
+  if(isIos()) return '📲 아이폰에 저장';
+  if(fileShareSupported()) return '📲 공유 시트로 저장';
+  return '⬇ 영상 저장';
 }
 
 function setSaveProgress(p, label){
@@ -1981,13 +1985,48 @@ async function fetchMp4(url, onProgress){
   }finally{ clearTimeout(timer); }
 }
 
-/* 바로 저장이 막힌 경우: 영상 열기 버튼 + 한 줄 안내 */
-function showSaveFallback(v){
+/* 저장이 바로 안 되는 경우: 영상 열기 버튼 + 한 줄 안내 */
+function showSaveFallback(v, opened){
   const hint = $('#saveHint');
   hint.classList.remove('hidden');
-  hint.innerHTML = '<b>웹앱에서는 사진첩 저장이 막혀 있어요.</b><br>'
-    + '아래 <b>영상 열기</b>를 누르면 재생 화면이 열립니다. 거기서 하단 <b>공유(□↑) → ‘비디오 저장’</b>을 누르면 사진첩에 들어가요.'
-    + `<div style="margin-top:10px"><a class="btn primary sm" href="${esc(v.url)}" target="_blank" rel="noopener">▶ 영상 열기</a></div>`;
+  hint.innerHTML = (opened
+      ? '<b>영상을 열었어요.</b> 재생 화면 <b>하단 공유(□↑) → ‘비디오 저장’</b>을 누르면 사진첩에 들어가요.'
+      : '<b>웹앱에서는 사진첩 저장이 막혀 있어요.</b> 아래 <b>영상 열기</b>를 누르면 재생 화면이 열리고,')
+    + (opened ? '<br>안 열렸으면 아래 버튼을 눌러 주세요.' : '<br>거기서 <b>하단 공유(□↑) → ‘비디오 저장’</b>을 누르면 사진첩에 들어가요.')
+    + '<div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap">'
+    + `<a class="btn primary sm" href="${esc(v.url)}" target="_blank" rel="noopener">▶ 영상 열기</a>`
+    + `<a class="btn ghost sm" href="${esc(v.url)}" download="shorts_${esc(v.tag || 'final')}.mp4" rel="noopener">⬇ 파일로 저장</a></div>`;
+}
+
+/* 영상 URL을 새 창(아이폰은 사파리 뷰)으로 — 공유 시트가 있는 화면 */
+function openVideoWindow(v){
+  const a = document.createElement('a');
+  a.href = v.url; a.target = '_blank'; a.rel = 'noopener';
+  document.body.appendChild(a); a.click(); a.remove();
+}
+function downloadFile(v, filename){
+  const a = document.createElement('a');
+  a.href = v.url; a.download = filename; a.rel = 'noopener';
+  document.body.appendChild(a); a.click(); a.remove();
+}
+
+/* 릴리즈 MP4는 github.com → release-assets.githubusercontent.com 으로
+   리다이렉트되는데 이 응답에 CORS 헤더가 없어서 브라우저 fetch(Blob)는
+   실패합니다(2026-11-27 라이브 브라우저에서 확인). 그래서 영상마다 한 번만
+   2바이트로 확인해 두고, 막히면 기다림 없이 바로 공유 시트 경로로 보냅니다. */
+const corsCache = new Map();
+function corsState(url){ return corsCache.get(url) || null; }
+async function probeCors(url){
+  if(!url || corsCache.has(url)) return;
+  const ctrl = new AbortController();
+  try{
+    const r = await fetch(url, {headers:{Range:'bytes=0-1'}, cache:'no-store', signal:ctrl.signal});
+    corsCache.set(url, (r.ok || r.status === 206) ? 'ok' : 'fail');
+  }catch(e){
+    corsCache.set(url, 'fail');
+  }finally{
+    try{ ctrl.abort(); }catch(_){}
+  }
 }
 
 async function saveVideo(){
@@ -1995,41 +2034,50 @@ async function saveVideo(){
   if(!v || !v.url){ toast('영상을 먼저 불러와 주세요'); return; }
   if($('#btnSaveVideo').disabled) return;
   const filename = `shorts_${v.tag || 'final'}.mp4`;
+  const fileShare = fileShareSupported();
 
-  // 공유 시트(파일)를 못 쓰는 브라우저: 바로 내려받기
-  if(!fileShareSupported()){
-    const a = document.createElement('a');
-    a.href = v.url; a.download = filename; a.rel = 'noopener';
-    document.body.appendChild(a); a.click(); a.remove();
-    toast('영상을 내려받는 중이에요', 3000);
+  // ① 공유 시트(파일)가 되고 영상 바이트도 읽히는 환경 → 진짜 원터치 저장
+  if(fileShare && corsState(v.url) !== 'fail'){
+    const btn = $('#btnSaveVideo');
+    btn.disabled = true;
+    btn.textContent = '영상 준비 중…';
+    setSaveProgress(0, '영상 준비 중… 0%');
+    try{
+      const blob = await fetchMp4(v.url, p=>setSaveProgress(p, `영상 준비 중… ${Math.round(p*100)}%`));
+      setSaveProgress(1, '공유 창을 여는 중…');
+      const file = new File([blob], filename, {type:'video/mp4'});
+      if(!navigator.canShare({files:[file]})) throw new Error('CANNOT_SHARE_FILE');
+      corsCache.set(v.url, 'ok');
+      await navigator.share({files:[file], title: v.title || '쇼츠 영상'});
+      hideSaveProgress();
+      toast('공유 시트에서 ‘비디오 저장’을 누르면 사진첩에 들어가요', 5000);
+    }catch(e){
+      hideSaveProgress();
+      if(e && e.name === 'AbortError'){
+        toast('저장을 취소했어요');
+      }else{
+        corsCache.set(v.url, 'fail');
+        showSaveFallback(v, false);
+        toast('아래 ‘영상 열기’ → 공유(□↑) → 비디오 저장', 5000);
+      }
+    }finally{
+      btn.disabled = false;
+      btn.textContent = saveLabel();
+    }
     return;
   }
 
-  const btn = $('#btnSaveVideo');
-  btn.disabled = true;
-  const oldLabel = btn.textContent;
-  btn.textContent = '영상 준비 중…';
-  setSaveProgress(0, '영상 준비 중… 0%');
-  try{
-    const blob = await fetchMp4(v.url, p=>setSaveProgress(p, `영상 준비 중… ${Math.round(p*100)}%`));
-    setSaveProgress(1, '공유 창을 여는 중…');
-    const file = new File([blob], filename, {type:'video/mp4'});
-    if(!navigator.canShare({files:[file]})) throw new Error('CANNOT_SHARE_FILE');
-    await navigator.share({files:[file], title: v.title || '쇼츠 영상'});
-    hideSaveProgress();
-    toast('공유 시트에서 ‘비디오 저장’을 누르면 사진첩에 들어가요', 5000);
-  }catch(e){
-    hideSaveProgress();
-    if(e && e.name === 'AbortError'){
-      toast('저장을 취소했어요');
-    }else{
-      showSaveFallback(v);
-      toast('영상이 열리면 공유(□↑) → 비디오 저장을 눌러 주세요', 5000);
-    }
-  }finally{
-    btn.disabled = false;
-    btn.textContent = oldLabel || saveLabel();
+  // ② 아이폰·안드로이드: 파일을 넣을 수 없으니 영상을 열어 공유 시트로
+  if(isIos() || (fileShare && isTouch())){
+    openVideoWindow(v);
+    showSaveFallback(v, true);
+    toast('재생 화면 하단 공유(□↑) → 비디오 저장', 5000);
+    return;
   }
+
+  // ③ 데스크톱: 파일로 내려받기
+  downloadFile(v, filename);
+  toast('영상을 내려받는 중이에요', 3000);
 }
 
 /* 4단계 완성 화면에 영상 하나를 올립니다(방금 렌더 · 과거 릴리즈 공용) */
@@ -2070,6 +2118,7 @@ function showVideo(v){
     capNote.classList.remove('hidden');
     capNote.innerHTML = '이 영상은 이전에 만든 결과예요. 아래 캡션은 지금 대본 기준이라 영상과 다를 수 있습니다.';
   }
+  probeCors(v.url);   // 저장 버튼이 기다리지 않도록 미리 확인
   save();
 }
 
