@@ -1689,6 +1689,18 @@ def make_community_body(chunk, font, body_h: int, dest: Path) -> Path:
     return dest
 
 
+def community_mask(work: Path, idx: int) -> Path:
+    """프레임의 둥근 모서리 마스크(영상·사진 공용)."""
+    from PIL import Image, ImageDraw
+
+    mask = Image.new("L", (CM_FRAME_W, CM_FRAME_H), 0)
+    ImageDraw.Draw(mask).rounded_rectangle([0, 0, CM_FRAME_W - 1, CM_FRAME_H - 1],
+                                           radius=CM_FRAME_RADIUS, fill=255)
+    p = work / f"cm_mask_{idx:02d}.png"
+    mask.save(p)
+    return p
+
+
 def community_frame_assets(visual: str, work: Path, idx: int) -> tuple[Path, Path]:
     """프레임 안에서 움직일 원본(2배 크기 크롭)과 둥근 모서리 마스크를 만듭니다."""
     from PIL import Image, ImageDraw
@@ -1703,12 +1715,7 @@ def community_frame_assets(visual: str, work: Path, idx: int) -> tuple[Path, Pat
         fg = r.crop((x0, y0, x0 + fw * 2, y0 + fh * 2))
     fg_path = work / f"cm_fg_{idx:02d}.jpg"
     fg.save(fg_path, quality=95, subsampling=1)
-
-    mask = Image.new("L", (fw, fh), 0)
-    ImageDraw.Draw(mask).rounded_rectangle([0, 0, fw - 1, fh - 1], radius=CM_FRAME_RADIUS, fill=255)
-    mask_path = work / f"cm_mask_{idx:02d}.png"
-    mask.save(mask_path)
-    return fg_path, mask_path
+    return fg_path, community_mask(work, idx)
 
 
 def community_filter(idx: int, dur: float) -> str:
@@ -1860,11 +1867,12 @@ def render_cut(
     inputs: list[str] = []
     cm_mask_path: Path | None = None
     if community:
-        # 커뮤니티 스킨: 이미지는 프레임 크기로 크롭한 2배 원본 위에서 줌/패닝
+        # 커뮤니티 스킨: 이미지는 프레임 크기로 크롭한 2배 원본 위에서 줌/패닝, 영상은 그대로 재생
+        cm_mask_path = community_mask(work, idx)
         if is_video_file:
             inputs += ["-stream_loop", "-1", "-i", visual]
         else:
-            cm_fg, cm_mask_path = community_frame_assets(visual, work, idx)
+            cm_fg, _mask = community_frame_assets(visual, work, idx)
             inputs += ["-loop", "1", "-framerate", str(FPS), "-i", str(cm_fg)]
     elif is_video_file:
         inputs += ["-stream_loop", "-1", "-i", visual]
