@@ -482,13 +482,23 @@
           </select>
           <div class="hint">지금 실제로 동작하는 한국어 목소리 3종입니다(edge-tts).</div>
         </div>
-        <div style="flex:1 1 150px">
+        <div style="flex:1 1 130px">
           <label class="f" for="rateSelect">말하기 속도</label>
           <select id="rateSelect">
             <option value="+0%">+0% · 천천히</option>
             <option value="+12%">+12% · 기본</option>
             <option value="+20%">+20% · 빠르게</option>
             <option value="+30%">+30% · 아주 빠르게</option>
+            <option value="+40%">+40% · 초고속</option>
+          </select>
+        </div>
+        <div style="flex:1 1 130px">
+          <label class="f" for="speedSelect">영상 재생 배속</label>
+          <select id="speedSelect">
+            <option value="1">1.0x · 기본</option>
+            <option value="1.15">1.15x · 추천(쫀득)</option>
+            <option value="1.25">1.25x · 빠르게</option>
+            <option value="1.35">1.35x · 초고속</option>
           </select>
         </div>
       </div>
@@ -785,13 +795,14 @@ const VOICES = [
   {id:'ko-KR-HyunsuMultilingualNeural', short:'남성 (현수)', label:'🧑 남성 · 현수 — 밝고 또렷한 톤'},
   {id:'ko-KR-SunHiNeural',              short:'여성 (선히)', label:'👩 여성 · 선히 — 부드럽고 밝은 톤'}
 ];
-const RATES = ['+0%', '+12%', '+20%', '+30%'];
+const RATES = ['+0%', '+12%', '+20%', '+30%', '+40%'];
+const SPEEDS = [1, 1.15, 1.25, 1.35];
 const voiceShort = id => (VOICES.find(v=>v.id===id) || VOICES[0]).short;
 const DEFAULT_BOARD = '썰랄라';
 
 const S = {
   settings: { gemini:'', pat:'', pexels:'', repo: DEFAULT_REPO },
-  topic:'', tone:'유머 썰', voice:'ko-KR-InJoonNeural', rate:'+12%', bgm:true,
+  topic:'', tone:'유머 썰', voice:'ko-KR-InJoonNeural', rate:'+12%', speed:1, bgm:true,
   template:'default', board:DEFAULT_BOARD, kicker:'', cmTime:'', cmComments:'',
   title:'', cuts:[], step:1, stage:1,
   run:null, // {id, url, number, status, conclusion}
@@ -1064,6 +1075,8 @@ function applyVoiceUI(){
   if(vs) vs.value = VOICES.some(v=>v.id===S.voice) ? S.voice : VOICES[0].id;
   const rs = $('#rateSelect');
   if(rs) rs.value = RATES.includes(S.rate) ? S.rate : '+12%';
+  const ss = $('#speedSelect');
+  if(ss) ss.value = String(SPEEDS.includes(Number(S.speed)) ? Number(S.speed) : 1);
 }
 function applyTemplateUI(){
   const cur = S.template === 'community' ? 'community' : 'default';
@@ -1081,6 +1094,7 @@ $$('#templateChips .chip').forEach(b=>b.onclick=()=>{
 $('#boardName').addEventListener('input', e=>{ S.board = e.target.value; renderPreview(); save(); });
 $('#voiceSelect').addEventListener('change', e=>{ S.voice = e.target.value; save(); syncRenderSummary(); });
 $('#rateSelect').addEventListener('change', e=>{ S.rate = e.target.value; save(); syncRenderSummary(); });
+$('#speedSelect').addEventListener('change', e=>{ S.speed = Number(e.target.value) || 1; save(); syncRenderSummary(); });
 $$('.chip.ex').forEach(b=>b.onclick=()=>{
   $('#topic').value = b.dataset.ex; S.topic = b.dataset.ex; save();
   $('#topic').focus();
@@ -1574,6 +1588,7 @@ function jsonToState(text){
   }
   /* 속도·BGM은 payload 기준으로 맞춤 (빠지면 기본값) — 이전 import 값이 남지 않게 */
   out.rate = (typeof meta.rate === 'string' && meta.rate.trim()) ? meta.rate.trim() : '+12%';
+  out.speed = (typeof meta.speed === 'number' && SPEEDS.includes(meta.speed)) ? meta.speed : 1;
   out.bgm = (typeof meta.bgm === 'boolean') ? meta.bgm : true;
   return out;
 }
@@ -1601,6 +1616,7 @@ function applyJsonPayload(text){
   if(next.cmComments !== undefined) S.cmComments = next.cmComments;
   if(next.voice) S.voice = next.voice;
   if(next.rate) S.rate = next.rate;
+  if(next.speed !== undefined) S.speed = next.speed;
   if(typeof next.bgm === 'boolean') S.bgm = next.bgm;
   S.cuts = next.cuts;
   previewIdx = 0;
@@ -1763,6 +1779,7 @@ function payload(){
     template: community ? 'community' : 'default',
     voice: S.voice,
     rate: S.rate || '+12%',
+    speed: Number(S.speed) || 1,
     tone: S.tone,
     bgm: S.bgm !== false,
     cuts: S.cuts.filter(c=>c.narration.trim()||c.subtitle.trim()).map(c=>{
@@ -2478,11 +2495,12 @@ $('#btnCheckAll').onclick = async ()=>{
    ══════════════════════════════════════════════════════════ */
 function syncRenderSummary(){
   const n = S.cuts.length;
-  const secs = Math.round(S.cuts.reduce((a,c)=>a+estimateDur(c.narration||c.subtitle||''),0));
+  const spd = Number(S.speed) || 1;
+  const secs = Math.round(S.cuts.reduce((a,c)=>a+estimateDur(c.narration||c.subtitle||''),0) / spd);
   $('#sumCuts').textContent = `${n}컷 · 약 ${secs}초`;
   $('#sumTemplate').textContent = S.template === 'community'
     ? `🩵 커뮤니티 썰 · ${(S.board || DEFAULT_BOARD)}` : '🎬 기본 쇼츠';
-  $('#sumVoice').textContent = `${voiceShort(S.voice)} · ${S.rate || '+12%'} · BGM ${S.bgm===false?'OFF':'ON'}`;
+  $('#sumVoice').textContent = `${voiceShort(S.voice)} · ${S.rate || '+12%'} · ${spd}x · BGM ${S.bgm===false?'OFF':'ON'}`;
   if(!$('#stepList').children.length){
     setRenderStages([
       {name:'렌더 요청', state:''},{name:'ffmpeg · 폰트 설치', state:''},

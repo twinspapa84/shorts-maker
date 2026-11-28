@@ -2275,6 +2275,21 @@ def main() -> int:
     if audio_mode in ("none", "failed"):
         shutil.copyfile(raw, out_path)
 
+    speed = max(0.5, min(2.0, float(payload.get("speed") or 1.0)))
+    if abs(speed - 1.0) > 0.01:
+        sped = work / "sped.mp4"
+        log(f"전체 영상 {speed:.2f}x 배속 적용 중…")
+        run([
+            FFMPEG, "-y", "-i", str(out_path),
+            "-vf", f"setpts=PTS/{speed:.4f}",
+            "-af", f"atempo={speed:.4f}",
+            "-r", str(FPS),
+            "-c:v", "libx264", "-preset", "medium", "-crf", "19",
+            "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k", "-ar", "44100", "-ac", "2",
+            "-movflags", "+faststart", str(sped),
+        ], timeout=900)
+        shutil.move(str(sped), str(out_path))
+
     thumb = out_path.with_name("thumbnail.jpg")
     try:
         make_thumbnail(out_path, thumb)
