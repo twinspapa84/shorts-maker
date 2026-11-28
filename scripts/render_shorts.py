@@ -188,7 +188,7 @@ FALLBACK_VOICES = {
 }
 
 
-async def _tts_async(text: str, voice: str, rate: str, out_path: Path, pitch: str = "+0Hz", volume: str = "+25%") -> list[dict]:
+async def _tts_async(text: str, voice: str, rate: str, out_path: Path, pitch: str = "+0Hz", volume: str = "+0%") -> list[dict]:
     import edge_tts
 
     comm = edge_tts.Communicate(text, voice, rate=rate, pitch=pitch, volume=volume)
@@ -2071,7 +2071,7 @@ def render_cut(
     post.append("format=yuv420p")
     filt.append(f"[{prev}]{','.join(post)}[v]")
 
-    afilter = [f"apad=whole_dur={dur:.3f}", f"atrim=0:{dur:.3f}", "asetpts=PTS-STARTPTS", "loudnorm=I=-11:TP=-1.0:LRA=9", "volume=1.18"]
+    afilter = [f"apad=whole_dur={dur:.3f}", f"atrim=0:{dur:.3f}", "asetpts=PTS-STARTPTS", "loudnorm=I=-14:TP=-1.5:LRA=9"]
     if idx == 0:
         afilter.append("afade=t=in:st=0:d=0.05")
     if is_last:
@@ -2206,7 +2206,7 @@ def main() -> int:
     rate = payload.get("rate") or "+12%"
     template = str(payload.get("template") or "default").strip().lower() or "default"
     community = template == "community"
-    pitch = (payload.get("pitch") or ("+14Hz" if community else "+0Hz")).strip()
+    pitch = (payload.get("pitch") or ("+6Hz" if community else "+0Hz")).strip()
     cm_info = community_info(payload) if community else None
     cm_layout = community_layout(title, cm_info) if community else None
     pexels_key = os.environ.get("PEXELS_API_KEY", "").strip()
