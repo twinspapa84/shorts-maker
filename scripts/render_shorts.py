@@ -188,20 +188,20 @@ FALLBACK_VOICES = {
 }
 
 
-async def _tts_async(text: str, voice: str, rate: str, out_path: Path) -> None:
+async def _tts_async(text: str, voice: str, rate: str, out_path: Path, pitch: str = "+0Hz") -> None:
     import edge_tts
 
-    comm = edge_tts.Communicate(text, voice, rate=rate)
+    comm = edge_tts.Communicate(text, voice, rate=rate, pitch=pitch)
     await comm.save(str(out_path))
 
 
-def synthesize(text: str, voice: str, rate: str, out_path: Path) -> None:
+def synthesize(text: str, voice: str, rate: str, out_path: Path, pitch: str = "+0Hz") -> None:
     voices = FALLBACK_VOICES.get(voice, [voice, "ko-KR-SunHiNeural"])
     last_err: Exception | None = None
     for v in voices:
         for attempt in range(3):
             try:
-                asyncio.run(_tts_async(text, v, rate, out_path))
+                asyncio.run(_tts_async(text, v, rate, out_path, pitch=pitch))
                 if out_path.exists() and out_path.stat().st_size > 1200:
                     return
                 raise RuntimeError("빈 오디오 파일")
@@ -1829,6 +1829,7 @@ def render_cut(
     template: str = "default",
     community_meta: dict | None = None,
     cm_layout: dict | None = None,
+    pitch: str = "+0Hz",
 ) -> dict:
     idx = index
     is_last = idx == total - 1
@@ -1844,7 +1845,7 @@ def render_cut(
         spoken_tokens = [(strip_marks(spoken) or " ", [False])]
     tts_text = tokens_plain(spoken_tokens)          # TTS 에는 ** 없는 순수 문장
     log(f"[{idx + 1}/{total}] 음성 생성 중…")
-    synthesize(tts_text, voice, rate, audio_path)
+    synthesize(tts_text, voice, rate, audio_path, pitch=pitch)
     voice_dur = audio_duration(audio_path)
     pad_after = 0.5 if is_last else (0.24 if idx == 0 else 0.3)
     dur = round(max(voice_dur + pad_after, 1.6), 3)
@@ -1865,12 +1866,14 @@ def render_cut(
     inputs: list[str] = []
     cm_mask_path: Path | None = None
     if community:
-        # 커뮤니티 스킨: 이미지는 프레임 크기로 크롭한 2배 원본 위에서 줌/패닝, 영상은 그대로 재생
+        # 커뮤니티 스킨: product-card 레이어면 선명한 원본(fg)을 꺼내고, 영상은 그대로 재생
         cm_mask_path = community_mask(work, idx)
         if is_video_file:
             inputs += ["-stream_loop", "-1", "-i", visual]
         else:
-            cm_fg, _mask = community_frame_assets(visual, work, idx)
+            cm_layers = load_card_layers(visual)
+            cm_src = cm_layers["fg"] if cm_layers and cm_layers.get("fg") else visual
+            cm_fg, _mask = community_frame_assets(cm_src, work, idx)
             inputs += ["-loop", "1", "-framerate", str(FPS), "-i", str(cm_fg)]
     elif is_video_file:
         inputs += ["-stream_loop", "-1", "-i", visual]
@@ -2151,6 +2154,7 @@ def main() -> int:
     rate = payload.get("rate") or "+12%"
     template = str(payload.get("template") or "default").strip().lower() or "default"
     community = template == "community"
+    pitch = (payload.get("pitch") or ("+8Hz" if community else "+0Hz")).strip()
     cm_info = community_info(payload) if community else None
     cm_layout = community_layout(title, cm_info) if community else None
     pexels_key = os.environ.get("PEXELS_API_KEY", "").strip()
@@ -2197,6 +2201,7 @@ def main() -> int:
             narration=narration, subtitle=subtitle, title=title,
             voice=voice, rate=rate, work=work, sub_font=sub_font,
             template=template, community_meta=cm_info, cm_layout=cm_layout,
+            pitch=pitch,
         ))
 
     if not results:
