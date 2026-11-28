@@ -188,22 +188,34 @@ FALLBACK_VOICES = {
 }
 
 
-async def _tts_async(text: str, voice: str, rate: str, out_path: Path, pitch: str = "+0Hz") -> None:
+async def _tts_async(text: str, voice: str, rate: str, out_path: Path, pitch: str = "+0Hz") -> list[dict]:
     import edge_tts
 
     comm = edge_tts.Communicate(text, voice, rate=rate, pitch=pitch)
-    await comm.save(str(out_path))
+    bounds: list[dict] = []
+    with out_path.open("wb") as f:
+        async for chunk in comm.stream():
+            ctype = chunk.get("type")
+            if ctype == "audio":
+                f.write(chunk["data"])
+            elif ctype == "WordBoundary":
+                bounds.append({
+                    "offset": float(chunk.get("offset", 0)) / 10_000_000.0,
+                    "duration": float(chunk.get("duration", 0)) / 10_000_000.0,
+                    "text": str(chunk.get("text") or ""),
+                })
+    return bounds
 
 
-def synthesize(text: str, voice: str, rate: str, out_path: Path, pitch: str = "+0Hz") -> None:
+def synthesize(text: str, voice: str, rate: str, out_path: Path, pitch: str = "+0Hz") -> list[dict]:
     voices = FALLBACK_VOICES.get(voice, [voice, "ko-KR-SunHiNeural"])
     last_err: Exception | None = None
     for v in voices:
         for attempt in range(3):
             try:
-                asyncio.run(_tts_async(text, v, rate, out_path, pitch=pitch))
+                bounds = asyncio.run(_tts_async(text, v, rate, out_path, pitch=pitch))
                 if out_path.exists() and out_path.stat().st_size > 1200:
-                    return
+                    return bounds
                 raise RuntimeError("빈 오디오 파일")
             except Exception as e:  # noqa: BLE001
                 last_err = e
@@ -1455,6 +1467,46 @@ def chunk_timings(parts: list[str], voice_dur: float, dur: float) -> list[tuple[
     return [(round(a, 3), round(b, 3)) for a, b in out]
 
 
+def chunk_timings_from_bounds(
+    parts: list[str], bounds: list[dict], voice_dur: float, dur: float
+) -> list[tuple[float, float]]:
+    """edge-tts WordBoundary 타임스탬프에 자막 조각 시작·끝 시각을 정확히 맞춥니다."""
+    if not parts:
+        return []
+    if len(parts) == 1:
+        return [(0.0, dur)]
+    if not bounds:
+        return chunk_timings(parts, voice_dur, dur)
+
+    def norm(s: str) -> str:
+        return re.sub(r"[^가-힣A-Za-z0-9]", "", s)
+
+    b_norms = [norm(b.get("text", "")) for b in bounds]
+    b_lens = [max(len(t), 1) for t in b_norms]
+    total_b_chars = sum(b_lens)
+    p_norms = [norm(p) for p in parts]
+    total_p_chars = max(sum(len(p) for p in p_norms), 1)
+
+    starts: list[float] = [0.0]
+    acc_p = 0
+    b_idx = 0
+    acc_b = 0
+    for k in range(1, len(parts)):
+        acc_p += len(p_norms[k - 1])
+        target_b = total_b_chars * (acc_p / total_p_chars)
+        while b_idx < len(bounds) - 1 and acc_b + b_lens[b_idx] * 0.5 < target_b:
+            acc_b += b_lens[b_idx]
+            b_idx += 1
+        st = max(starts[-1] + 0.15, float(bounds[b_idx]["offset"]))
+        starts.append(min(st, max(dur - 0.25 * (len(parts) - k), starts[-1] + 0.15)))
+
+    out: list[tuple[float, float]] = []
+    for k, st in enumerate(starts):
+        ed = starts[k + 1] if k + 1 < len(starts) else dur
+        out.append((round(st, 3), round(max(ed, st + 0.15), 3)))
+    return out
+
+
 # ----------------------------------------------------------------------------
 # 커뮤니티 썰 스킨 (template="community")
 #   하늘색 게시판 헤더 + 굵은 검정 제목 + 메타바 · 흰 배경 · 둥근 이미지 프레임
@@ -1845,13 +1897,13 @@ def render_cut(
         spoken_tokens = [(strip_marks(spoken) or " ", [False])]
     tts_text = tokens_plain(spoken_tokens)          # TTS 에는 ** 없는 순수 문장
     log(f"[{idx + 1}/{total}] 음성 생성 중…")
-    synthesize(tts_text, voice, rate, audio_path, pitch=pitch)
+    bounds = synthesize(tts_text, voice, rate, audio_path, pitch=pitch)
     voice_dur = audio_duration(audio_path)
     pad_after = 0.5 if is_last else (0.24 if idx == 0 else 0.3)
     dur = round(max(voice_dur + pad_after, 1.6), 3)
 
     chunks = split_chunks_tokens(spoken_tokens, max_len=CM_CHUNK_LEN if community else 15) or [spoken_tokens]
-    times = chunk_timings([tokens_plain(c) for c in chunks], voice_dur, dur)
+    times = chunk_timings_from_bounds([tokens_plain(c) for c in chunks], bounds, voice_dur, dur)
     font = sub_font or (pick_community_font([tts_text]) if community else pick_sub_font(chunks))
 
     is_clip = visual_kind.startswith("clip") and not community
@@ -2019,7 +2071,7 @@ def render_cut(
     post.append("format=yuv420p")
     filt.append(f"[{prev}]{','.join(post)}[v]")
 
-    afilter = [f"apad=pad_dur={pad_after + 0.1:.2f}", "loudnorm=I=-14:TP=-1.5:LRA=11"]
+    afilter = [f"apad=whole_dur={dur:.3f}", f"atrim=0:{dur:.3f}", "asetpts=PTS-STARTPTS", "loudnorm=I=-14:TP=-1.5:LRA=11"]
     if idx == 0:
         afilter.append("afade=t=in:st=0:d=0.05")
     if is_last:
